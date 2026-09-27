@@ -30,7 +30,6 @@ LOUNGE_WORKER_BOUNDS = {
     "세이지": (2, 3),
 }
 
-# 기본 탑재 샘플 데이터
 SAMPLE_CSV_DATA = """이름,성별,신청휴무일,라운지,생리휴가일,직급
 김연진M,여,"2, 16",자데,,매니저
 백은정,여,"4, 18",자데,,선임
@@ -74,7 +73,6 @@ def solve_global_schedule(
     worker_bounds,
     public_holidays,
 ):
-    """월 목표 휴무일수 강제 및 최적화 스케줄 연산 엔진"""
     num_days = calendar.monthrange(year, month)[1]
     num_emp = len(emp_list)
 
@@ -889,7 +887,7 @@ def export_to_excel_single_sheet(
 
 
 # ==============================================================================
-# 5. Streamlit 메인 UI 대시보드
+# 5. Streamlit 메인 UI 대시보드 (다크모드 고 대비 CSS 적용)
 # ==============================================================================
 st.set_page_config(
     page_title="라운지 근무 스케줄 최적화 시스템",
@@ -897,29 +895,58 @@ st.set_page_config(
     layout="wide",
 )
 
-# Pretendard 커스텀 CSS 적용
+# 다크 모드 및 라이트 모드 공통 시시성 보장 강제 CSS 설정
 st.markdown(
     """
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    * { font-family: 'Pretendard', sans-serif !important; }
     
-    .stMetric {
-        background-color: #ffffff;
-        padding: 16px;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-        border: 1px solid #e2e8f0;
+    html, body, [data-testid="stAppViewContainer"] {
+        font-family: 'Pretendard', sans-serif !important;
+        background-color: #f8fafc !important;
+        color: #0f172a !important;
     }
-    .badge-work { background-color: #E3F2FD; color: #0D47A1; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-    .badge-off { background-color: #E0E0E0; color: #424242; padding: 2px 6px; border-radius: 4px; }
-    .badge-req { background-color: #C8E6C9; color: #1B5E20; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-    .badge-m { background-color: #FFE0B2; color: #E65100; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
-    .badge-sup { background-color: #FCE4D6; color: #C65911; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
     
-    .schedule-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; }
-    .schedule-table th, .schedule-table td { border: 1px solid #cbd5e1; padding: 5px 2px; }
-    .schedule-table th { background-color: #1e293b; color: white; }
+    /* 요약 카드 디자인 강제 고정 */
+    [data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        padding: 16px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    [data-testid="stMetricLabel"] p, [data-testid="stMetricValue"] div {
+        color: #0f172a !important;
+    }
+
+    /* 근무 표 스타일 강제 고정 (다크모드 문자 안보임 방지) */
+    .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: center;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    .schedule-table th {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #334155 !important;
+        padding: 8px 4px !important;
+    }
+    .schedule-table td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 6px 3px !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    /* 뱃지 시각화 스타일 */
+    .badge-work { background-color: #e0f2fe !important; color: #0369a1 !important; font-weight: bold; padding: 3px 6px; border-radius: 4px; display: inline-block; }
+    .badge-off { background-color: #f1f5f9 !important; color: #475569 !important; padding: 3px 6px; border-radius: 4px; display: inline-block; }
+    .badge-req { background-color: #dcfce7 !important; color: #15803d !important; font-weight: bold; padding: 3px 6px; border-radius: 4px; display: inline-block; }
+    .badge-m { background-color: #fef3c7 !important; color: #b45309 !important; font-weight: bold; padding: 3px 6px; border-radius: 4px; display: inline-block; }
+    .badge-sup { background-color: #ffedd5 !important; color: #c2410c !important; font-weight: bold; padding: 3px 6px; border-radius: 4px; display: inline-block; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -931,9 +958,7 @@ st.caption(
     "Google OR-Tools 최적화 연산 엔진 기반 / 지원 근무 및 8대 핵심 제약 조건 100% 반영"
 )
 
-# ------------------------------------------------------------------------------
 # 사이드바 설정 영역
-# ------------------------------------------------------------------------------
 st.sidebar.header("⚙️ 연산 기본 설정")
 year = st.sidebar.number_input("연도", value=2026, step=1)
 month = st.sidebar.number_input(
@@ -947,9 +972,7 @@ public_holidays = [
     int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()
 ]
 
-# ------------------------------------------------------------------------------
 # CSV 파일 처리
-# ------------------------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.header("📂 직원 데이터")
 uploaded_file = st.sidebar.file_uploader(
@@ -971,7 +994,6 @@ elif use_sample:
 else:
     df_input = None
 
-# 직원 데이터 구조화
 all_employees_flat = []
 lounge_employees = {lounge: [] for lounge in LOUNGE_LIST}
 
@@ -1031,7 +1053,7 @@ if df_input is not None:
         all_employees_flat.append(emp_dict)
         lounge_employees.setdefault(lounge, []).append(emp_dict)
 
-# 요약 지표 카드 (Hero Section)
+# 요약 지표 카드
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("👥 총 인원", f"{len(all_employees_flat)}명")
 m2.metric("📅 대상 연월", f"{year}년 {month}월")
@@ -1081,7 +1103,6 @@ with tab1:
         else:
             st.success("🎉 최적 스케줄 연산 완료!")
 
-            # 라운지별 스케줄 맵 생성
             lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
             for i, e in enumerate(all_employees_flat):
                 lounge_schedules[e["lounge"]].append(flat_labels[i])
@@ -1089,7 +1110,6 @@ with tab1:
             num_days = calendar.monthrange(year, month)[1]
             weekdays_kr = ["월", "화", "수", "목", "금", "토", "일"]
 
-            # HTML 표 생성
             for lounge_name in LOUNGE_LIST:
                 if (
                     lounge_name not in lounge_schedules
@@ -1107,7 +1127,7 @@ with tab1:
                     w = datetime.date(year, month, d).weekday()
                     is_hol = d in public_holidays or w >= 5
                     bg_col = "#ef4444" if is_hol else "#1e293b"
-                    html += f'<th style="background-color:{bg_col};">{d}<br><span style="font-size:10px;">{weekdays_kr[w]}</span></th>'
+                    html += f'<th style="background-color:{bg_col} !important; color:#ffffff !important;">{d}<br><span style="font-size:10px;">{weekdays_kr[w]}</span></th>'
 
                 html += "<th>근무</th><th>휴무</th><th>신청휴</th><th>생휴</th><th>휴무총합</th></tr></thead><tbody>"
 
@@ -1125,7 +1145,7 @@ with tab1:
                     req_cnt = sum(1 for x in labels if x == "신청휴")
                     m_cnt = sum(1 for x in labels if x == "생휴")
 
-                    html += f'<tr><td style="font-weight:bold;">{emp["rank"]}</td><td style="font-weight:bold;">{emp["name"]}</td><td>{emp["gender"]}</td>'
+                    html += f'<tr><td style="font-weight:bold; color:#0f172a !important;">{emp["rank"]}</td><td style="font-weight:bold; color:#0f172a !important;">{emp["name"]}</td><td style="color:#0f172a !important;">{emp["gender"]}</td>'
 
                     for d in range(1, num_days + 1):
                         lbl = labels[d - 1]
@@ -1141,9 +1161,9 @@ with tab1:
 
                         html += f'<td><span class="{badge_cls}">{lbl}</span></td>'
 
-                    html += f'<td style="font-weight:bold;">{work_cnt}</td><td>{off_cnt}</td><td style="color:#1b5e20; font-weight:bold;">{req_cnt}</td><td style="color:#e65100; font-weight:bold;">{m_cnt}</td><td style="background-color:#f1f5f9; font-weight:bold;">{off_cnt+req_cnt+m_cnt}</td></tr>'
+                    html += f'<td style="font-weight:bold; color:#0f172a !important;">{work_cnt}</td><td style="color:#0f172a !important;">{off_cnt}</td><td style="color:#1b5e20 !important; font-weight:bold;">{req_cnt}</td><td style="color:#e65100 !important; font-weight:bold;">{m_cnt}</td><td style="background-color:#f1f5f9 !important; color:#0f172a !important; font-weight:bold;">{off_cnt+req_cnt+m_cnt}</td></tr>'
 
-                # 일별 인원 수치 계산
+                # 일별 인원 수치 명확한 배경/글자색 고정
                 att_counts, sup_counts, act_counts = [], [], []
                 for d in range(1, num_days + 1):
                     home_cnt = sum(
@@ -1172,20 +1192,20 @@ with tab1:
                     )
                     act_counts.append(home_cnt + net_sup)
 
-                html += f'<tr style="background-color:#eff6ff; font-weight:bold;"><td colspan="3">출근 인원</td>'
+                html += f'<tr style="background-color:#eff6ff !important; font-weight:bold; color:#1e40af !important;"><td colspan="3" style="background-color:#eff6ff !important; color:#1e40af !important;">출근 인원</td>'
                 for c in att_counts:
-                    html += f"<td>{c}</td>"
-                html += '<td colspan="5"></td></tr>'
+                    html += f'<td style="background-color:#eff6ff !important; color:#1e40af !important;">{c}</td>'
+                html += '<td colspan="5" style="background-color:#eff6ff !important;"></td></tr>'
 
-                html += f'<tr style="background-color:#fff7ed; font-weight:bold; color:#c65911;"><td colspan="3">타 접점 지원</td>'
+                html += f'<tr style="background-color:#fff7ed !important; font-weight:bold; color:#c65911 !important;"><td colspan="3" style="background-color:#fff7ed !important; color:#c65911 !important;">타 접점 지원</td>'
                 for c in sup_counts:
-                    html += f"<td>{c}</td>"
-                html += '<td colspan="5"></td></tr>'
+                    html += f'<td style="background-color:#fff7ed !important; color:#c65911 !important;">{c}</td>'
+                html += '<td colspan="5" style="background-color:#fff7ed !important;"></td></tr>'
 
-                html += f'<tr style="background-color:#f0fdf4; font-weight:bold; color:#15803d;"><td colspan="3">실제 근무인원</td>'
+                html += f'<tr style="background-color:#f0fdf4 !important; font-weight:bold; color:#15803d !important;"><td colspan="3" style="background-color:#f0fdf4 !important; color:#15803d !important;">실제 근무인원</td>'
                 for c in act_counts:
-                    html += f"<td>{c}</td>"
-                html += '<td colspan="5"></td></tr>'
+                    html += f'<td style="background-color:#f0fdf4 !important; color:#15803d !important;">{c}</td>'
+                html += '<td colspan="5" style="background-color:#f0fdf4 !important;"></td></tr>'
 
                 html += "</tbody></table></div><br>"
                 st.markdown(html, unsafe_allow_html=True)
