@@ -25,8 +25,6 @@ CACHE_FILE = "cached_schedule.pkl"
 # [웹 페이지 기본 설정 및 커스텀 CSS]
 st.set_page_config(page_title="VIP Lounge Schedule System", page_icon="👑", layout="wide", initial_sidebar_state="expanded")
 
-# ❌ (이곳에 있던 PASSWORD = "vip2026" 부터 st.stop() 까지의 보안 게이트웨이 코드를 전부 지워주세요!) ❌
-
 # =========================================================
 # 🔄 세션 상태 및 로컬 파일 연동 (여기서부터 바로 스케줄 앱 시작)
 # =========================================================
@@ -43,8 +41,6 @@ if "schedule_generated" not in st.session_state:
         st.session_state.schedule_generated = False
         st.session_state.schedule_data = {}
 
-# CSS: 스케줄 앱 메인 화면용 CSS
-# ... (이하 기존 스케줄 코드 그대로 유지) ...
 # CSS: 스케줄 앱 메인 화면용 CSS
 st.markdown("""
     <style>
@@ -98,7 +94,6 @@ hide_streamlit_ui = """
 st.markdown(hide_streamlit_ui, unsafe_allow_html=True)
 
 st.markdown("""
-
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
     
@@ -168,7 +163,6 @@ st.markdown("""
 
 st.markdown("""
 <div style='text-align: center; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 25px; margin-bottom: 30px;'>
-
 </div>
 """, unsafe_allow_html=True)
 
@@ -187,26 +181,24 @@ st.sidebar.markdown("<br>", unsafe_allow_html=True)
 male_off = st.sidebar.number_input("남성 목표 휴무일수", value=11, step=1)
 female_off = st.sidebar.number_input("여성 목표 휴무일수", value=12, step=1)
 holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="3, 9")
+closed_days_str = st.sidebar.text_input("휴점일 지정 (쉼표 구분)", value="19")  # 💡 휴점일 입력 추가
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
+store_closed_days = [int(x.strip()) for x in closed_days_str.split(",") if x.strip().isdigit()]  # 💡 휴점일 리스트 변환
 
 def color_schedule_cells(val):
     val_str = str(val).strip()
-    if any(keyword in val_str for keyword in ["휴무", "생휴", "연차", "공휴", "반휴", "휴"]):
+    if "휴점" in val_str:  # 💡 휴점일 셀 강조 색상 추가 (짙은 회색)
+        return 'color: #FFFFFF; font-weight: bold; background-color: #555555;'
+    elif any(keyword in val_str for keyword in ["휴무", "생휴", "연차", "공휴", "반휴", "휴"]):
         return 'color: #FF6B6B; font-weight: bold; background-color: #3A1C1C;'
     elif any(keyword in val_str for keyword in ["근무", "주", "야", "오픈", "마감", "미들"]):
         return 'color: #4D96FF; font-weight: bold; background-color: #1C2A3A;'
     return ''
 
-target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
+target_order = ["자데", "자홀", "블랙", "블루", "세이지", "YP"]
 
-def get_order_weight(name):
-    for idx, target in enumerate(target_order):
-        if target in str(name):
-            return idx
-    return 999 
-
-# 👇 [여기에 헬퍼 함수 추가] 빈칸 제거 및 전체 셀에 다크모드 배경색을 입히는 함수
+# 빈칸 제거 및 전체 셀에 다크모드 배경색을 입히는 함수
 def apply_dark_style(df):
     return df.fillna("").style.set_properties(**{
         'background-color': '#161616',
@@ -304,7 +296,11 @@ else:
                     if lounge in lounge_employees:
                         lounge_employees[lounge].append(emp_dict)
 
-                flat_labels = solve_global_schedule(all_employees_flat, year, month, male_off, female_off, LOUNGE_WORKER_BOUNDS, public_holidays)
+                # 💡 함수 호출 시 store_closed_days 인자 추가 전달
+                flat_labels = solve_global_schedule(
+                    all_employees_flat, year, month, male_off, female_off, 
+                    LOUNGE_WORKER_BOUNDS, public_holidays, store_closed_days
+                )
 
                 if flat_labels is None:
                     st.error("❌ 스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다.")
@@ -320,7 +316,8 @@ else:
                         "month": month,
                         "male_off": male_off,
                         "female_off": female_off,
-                        "public_holidays": public_holidays
+                        "public_holidays": public_holidays,
+                        "store_closed_days": store_closed_days  # 💡 세션에 휴점일 데이터 보존
                     }
                     st.session_state.schedule_generated = True
                     st.session_state.schedule_data = new_schedule_data
@@ -384,7 +381,7 @@ else:
             summary_data = []
             for i, row in res_df.iterrows():
                 work_days = row[day_columns].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum()
-                off_days = row[day_columns].isin(["휴무", "휴", "반휴"]).sum()
+                off_days = row[day_columns].isin(["휴무", "휴", "반휴", "휴점"]).sum()  # 💡 통계 합산에 휴점 포함
                 m_off_days = row[day_columns].isin(["생휴"]).sum()
                 
                 summary_data.append({
@@ -409,7 +406,7 @@ else:
             
             daily_stats = []
             total_working = [res_df[day].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum() for day in day_columns]
-            total_off = [res_df[day].isin(["휴무", "휴", "생휴", "반휴"]).sum() for day in day_columns]
+            total_off = [res_df[day].isin(["휴무", "휴", "생휴", "반휴", "휴점"]).sum() for day in day_columns]  # 💡 일자별 휴무 인원에 휴점 포함
             
             daily_stats.append(["총 출근 인원"] + total_working)
             daily_stats.append(["총 휴무 인원"] + total_off)
@@ -439,7 +436,9 @@ else:
             # ---------------------------------------------------------
             st.markdown("### Ⅵ. 스케줄 검증 리포트 (Verification Report)")
             st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
-            checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"])
+            
+            # 💡 체크리스트 검증 함수에 휴점일 데이터 전달
+            checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"], data.get("store_closed_days", []))
             chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
             
             def highlight_result(val):
@@ -464,7 +463,11 @@ else:
                     lounge_schedules[e["lounge"]].append(labels[i])
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
-                export_to_excel_single_sheet(lounge_schedules, l_emp, all_emp, s_year, s_month, tmp_excel.name, data["public_holidays"], data["male_off"], data["female_off"])
+                # 💡 엑셀 추출 함수에 휴점일 데이터 전달
+                export_to_excel_single_sheet(
+                    lounge_schedules, l_emp, all_emp, s_year, s_month, 
+                    tmp_excel.name, data["public_holidays"], data["male_off"], data["female_off"], data.get("store_closed_days", [])
+                )
                 with open(tmp_excel.name, "rb") as f:
                     st.download_button(
                         label="💾 생성된 엑셀 파일 다운로드 (.xlsx)",
