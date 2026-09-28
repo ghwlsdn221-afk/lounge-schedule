@@ -19,7 +19,7 @@ LOUNGE_ALIAS = {
     "자스민홀": "자홀",
 }
 
-# 라운지별 근무 인원 기준 (최소, 최대) - YP 추가됨
+# 라운지별 근무 인원 기준 (최소, 최대)
 LOUNGE_WORKER_BOUNDS = {
     "블랙": (3, 4),
     "자데": (2, 3),  
@@ -32,7 +32,6 @@ LOUNGE_WORKER_BOUNDS = {
 def solve_global_schedule(
     emp_list, year, month, male_off_days, female_off_days, worker_bounds, public_holidays, store_closed_days=None
 ):
-    """월 목표 휴무일수 강제 및 최적화 스케줄 연산 (휴점일 기능 포함)"""
     if store_closed_days is None:
         store_closed_days = []
 
@@ -56,10 +55,8 @@ def solve_global_schedule(
             for l in LOUNGE_LIST:
                 assign[e, d, l] = model.NewBoolVar(f"assign_{e}_{d}_{l}")
 
-            # 하루에 휴무이거나, 정확히 1개의 라운지에 배정
             model.Add(is_off[e, d] + sum(assign[e, d, l] for l in LOUNGE_LIST) == 1)
 
-            # YP 관련 제약: YP 소속은 YP만 근무, 타 라운지는 YP 지원 불가
             if home_lounge == "YP":
                 for l in LOUNGE_LIST:
                     if l != "YP":
@@ -67,13 +64,12 @@ def solve_global_schedule(
             else:
                 model.Add(assign[e, d, "YP"] == 0)
 
-            # 자데/자홀 외 라운지 인원은 자사 라운지 우선 근무
             if home_lounge not in ["자데", "자홀"] and home_lounge != "YP":
                 for l in LOUNGE_LIST:
                     if l != home_lounge:
                         model.Add(assign[e, d, l] == 0)
 
-    # 0. [핵심] 휴점일 강제 전원 휴무
+    # 0. 휴점일 강제 전원 휴무
     for d in store_closed_days:
         for e in range(num_emp):
             model.Add(is_off[e, d] == 1)
@@ -82,23 +78,33 @@ def solve_global_schedule(
 
     for e, emp in enumerate(emp_list):
         target_off = male_off_days if emp["gender"] == "남" else female_off_days
-
-        # 1. 월간 목표 휴무일 강제 고정 (휴점일도 is_off=1 이므로 여기에 자동 합산됨)
+        
+        # [연차] 신청한 연차가 휴점일과 겹치지 않는 순수 연차일만 추출
+        annual_leaves = emp.get("req_annual", [])
+        valid_annual = [d for d in annual_leaves if d not in store_closed_days]
+        
+        # 1. 월간 목표 휴무일 + 연차일수 = 총 쉬는 날로 강제 (연차는 기본 휴무일수에 미포함)
         actual_off = sum(is_off[e, d] for d in range(1, num_days + 1))
-        model.Add(actual_off == target_off)
+        model.Add(actual_off == target_off + len(valid_annual))
+        
+        # [연차 강제 배정]
+        for ad in valid_annual:
+            if 1 <= ad <= num_days:
+                model.Add(is_off[e, ad] == 1)
 
-        # 2. 신청 휴무일 우선 반영 (벌점)
+        # 2. 신청 휴무일 반영
         for roff in emp["req_off"]:
-            if 1 <= roff <= num_days and roff not in store_closed_days:
+            if 1 <= roff <= num_days and roff not in store_closed_days and roff not in valid_annual:
                 penalty_vars.append((1 - is_off[e, roff]) * 3000)
 
-        # 3. 생휴 제약: 금/토/일 절대 불가, 무조건 월/화/수/목 중 1일 (휴점일 제외)
+        # 3. 생휴 제약: 이틀 연속 휴무일 때만 생휴 1일 배정 (월~목 한정)
         if emp["gender"] == "여":
             valid_m_days = [
                 d for d in range(1, num_days + 1)
                 if datetime.date(year, month, d).weekday() < 4  # 0:월, 1:화, 2:수, 3:목
                 and d not in emp["req_off"]
-                and d not in store_closed_days  # 휴점일에는 생휴 배정 금지
+                and d not in store_closed_days
+                and d not in valid_annual
             ]
 
             day_m_vars = []
@@ -106,6 +112,18 @@ def solve_global_schedule(
                 is_m = model.NewBoolVar(f"is_m_{e}_{d}")
                 model.Add(is_off[e, d] == 1).OnlyEnforceIf(is_m)
                 day_m_vars.append((d, is_m))
+
+                # ★ 생휴는 무조건 다른 쉬는 날과 맞닿아 2연휴를 구성해야 함 (Hard Constraint)
+                adj_off = []
+                if d > 1:
+                    adj_off.append(is_off[e, d - 1])
+                if d < num_days:
+                    adj_off.append(is_off[e, d + 1])
+                
+                if adj_off:
+                    model.AddBoolOr(adj_off).OnlyEnforceIf(is_m)
+                else:
+                    model.Add(is_m == 0)
 
             if day_m_vars:
                 model.AddExactlyOne([v[1] for v in day_m_vars])
@@ -115,27 +133,6 @@ def solve_global_schedule(
                     req_is_m = next((v[1] for v in day_m_vars if v[0] == emp["m_off"]), None)
                     if req_is_m is not None:
                         penalty_vars.append((1 - req_is_m) * 1000)
-
-                # 연속 휴무 권장 (전날 혹은 다음날 휴무)
-                for d, is_m in day_m_vars:
-                    adj_off = []
-                    if d > 1:
-                        adj_off.append(is_off[e, d - 1])
-                    if d < num_days:
-                        adj_off.append(is_off[e, d + 1])
-
-                    if adj_off:
-                        sum_adj = sum(adj_off)
-                        iso = model.NewBoolVar(f"m_iso_{e}_{d}")
-                        model.Add(sum_adj == 0).OnlyEnforceIf(iso)
-                        model.Add(sum_adj >= 1).OnlyEnforceIf(iso.Not())
-
-                        b_and = model.NewBoolVar(f"m_and_{e}_{d}")
-                        model.AddBoolOr([is_m.Not(), iso.Not(), b_and])
-                        model.AddImplication(b_and, is_m)
-                        model.AddImplication(b_and, iso)
-
-                        penalty_vars.append(b_and * 500)
 
     # 4. 연속 근무 및 휴무 패턴 제한
     for e in range(num_emp):
@@ -156,10 +153,9 @@ def solve_global_schedule(
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
             penalty_vars.append(off_3 * 300)
 
-    # 5. 라운지별 일일 최소/최대 근무 인원 제약 (휴점일 패스)
+    # 5. 라운지별 일일 최소/최대 근무 인원 제약
     for d in range(1, num_days + 1):
-        if d in store_closed_days:
-            continue
+        if d in store_closed_days: continue
 
         is_weekend_or_holiday = (datetime.date(year, month, d).weekday() >= 5) or (d in public_holidays)
 
@@ -187,58 +183,48 @@ def solve_global_schedule(
                     penalty_vars.append(shortfall * 10000)
                     penalty_vars.append(overage * 1000)
 
-    # 6. 전사 매니저 최소 2명 출근 제약 (휴점일 패스)
+    # 6. 전사 매니저 최소 2명 출근 제약
     managers = [e for e, emp in enumerate(emp_list) if emp["rank"] == "매니저"]
     if len(managers) >= 2:
         for d in range(1, num_days + 1):
-            if d in store_closed_days:
-                continue
+            if d in store_closed_days: continue
             mgrs_working = sum(1 - is_off[m, d] for m in managers)
             shortfall = model.NewIntVar(0, len(managers), f"mgr_short_{d}")
             model.Add(mgrs_working + shortfall >= 2)
             penalty_vars.append(shortfall * 1000)
 
-    # 7. 라운지별 핵심 책임자 동시 휴무 금지 (휴점일 패스)
+    # 7. 라운지별 핵심 책임자 동시 휴무 금지
     for l in LOUNGE_LIST:
         lounge_emps = [e for e, emp in enumerate(emp_list) if emp["lounge"] == l]
-        if not lounge_emps:
-            continue
+        if not lounge_emps: continue
 
         l_managers = [e for e in lounge_emps if emp_list[e]["rank"] == "매니저"]
         l_seniors = [e for e in lounge_emps if emp_list[e]["rank"] == "선임"]
 
         leaders = []
-        if len(l_managers) >= 2:
-            leaders = l_managers[:2]
-        elif len(l_managers) == 1 and len(l_seniors) >= 1:
-            leaders = [l_managers[0], l_seniors[0]]
-        elif len(l_managers) == 0 and len(l_seniors) >= 2:
-            leaders = l_seniors[:2]
+        if len(l_managers) >= 2: leaders = l_managers[:2]
+        elif len(l_managers) == 1 and len(l_seniors) >= 1: leaders = [l_managers[0], l_seniors[0]]
+        elif len(l_managers) == 0 and len(l_seniors) >= 2: leaders = l_seniors[:2]
 
         if leaders:
             for d in range(1, num_days + 1):
-                if d in store_closed_days:
-                    continue
+                if d in store_closed_days: continue
                 model.Add(sum(is_off[ldr, d] for ldr in leaders) <= 1)
 
-        # 출근 인원 0명 방지
         for d in range(1, num_days + 1):
-            if d in store_closed_days:
-                continue
+            if d in store_closed_days: continue
             model.Add(sum(is_off[e, d] for e in lounge_emps) <= len(lounge_emps) - 1)
 
     # 8. 타 라운지 지원 근무 벌점
     for e in range(num_emp):
         home_lounge = emp_list[e]["lounge"]
         for d in range(1, num_days + 1):
-            if d in store_closed_days:
-                continue
+            if d in store_closed_days: continue
             for l in LOUNGE_LIST:
                 if l != home_lounge:
                     penalty_vars.append(assign[e, d, l] * 100)
 
     model.Minimize(sum(penalty_vars))
-
     solver = CpSolver()
     solver.parameters.random_seed = random.randint(1, 10000)
     solver.parameters.max_time_in_seconds = 30.0
@@ -257,11 +243,15 @@ def solve_global_schedule(
                     chosen_m_day = d
                     break
 
+        valid_annual = [d for d in emp.get("req_annual", []) if d not in store_closed_days]
+
         emp_labels = []
         for d in range(1, num_days + 1):
             if solver.Value(is_off[e, d]) == 1:
                 if d in store_closed_days:
                     emp_labels.append("휴점")
+                elif d in valid_annual:
+                    emp_labels.append("연차")
                 elif d in emp["req_off"]:
                     emp_labels.append("신청휴")
                 elif d == chosen_m_day:
@@ -275,12 +265,11 @@ def solve_global_schedule(
 
     return flat_labels
 
-
 def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None):
-    """최적화 스케줄 결과 검증 체크리스트 집계 함수"""
     if store_closed_days is None: store_closed_days = []
     num_days = calendar.monthrange(year, month)[1]
     checklist = []
+    off_keywords = ["휴무", "신청휴", "생휴", "휴점", "연차"]
 
     # 1. 매니저 최소 출근
     managers = [e for e, emp in enumerate(emp_list) if emp["rank"] == "매니저"]
@@ -289,15 +278,10 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
         for d in range(1, num_days + 1):
             if d in store_closed_days: continue
             working_cnt = sum(1 for m in managers if flat_labels[m][d - 1] == "근무")
-            if working_cnt < 2:
-                mgr_short_days.append(d)
-
-        if not mgr_short_days:
-            chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "✅ 적합", "전일 매니저 2명 이상 출근 달성")
-        else:
-            chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "❌ 미흡", f"미달 일자: {mgr_short_days}일")
-    else:
-        chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "ℹ️ 해당없음", f"전사 매니저 총 {len(managers)}명")
+            if working_cnt < 2: mgr_short_days.append(d)
+        if not mgr_short_days: chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "✅ 적합", "전일 매니저 2명 이상 출근 달성")
+        else: chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "❌ 미흡", f"미달 일자: {mgr_short_days}일")
+    else: chk1 = ("매니저 최소 출근", "전사 매니저 매일 2명 이상 출근", "ℹ️ 해당없음", f"전사 매니저 총 {len(managers)}명")
     checklist.append(chk1)
 
     # 2. 책임자 휴무 교차 여부
@@ -307,7 +291,6 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
         if not lounge_emps: continue
         l_managers = [e for e in lounge_emps if emp_list[e]["rank"] == "매니저"]
         l_seniors = [e for e in lounge_emps if emp_list[e]["rank"] == "선임"]
-
         leaders = []
         if len(l_managers) >= 2: leaders = l_managers[:2]
         elif len(l_managers) == 1 and len(l_seniors) >= 1: leaders = [l_managers[0], l_seniors[0]]
@@ -316,17 +299,14 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
         if leaders:
             for d in range(1, num_days + 1):
                 if d in store_closed_days: continue
-                off_cnt = sum(1 for ldr in leaders if flat_labels[ldr][d - 1] in ["휴무", "신청휴", "생휴", "휴점"])
-                if off_cnt > 1:
-                    overlap_list.append(f"{l}({d}일)")
+                off_cnt = sum(1 for ldr in leaders if flat_labels[ldr][d - 1] in off_keywords)
+                if off_cnt > 1: overlap_list.append(f"{l}({d}일)")
 
-    if not overlap_list:
-        chk2 = ("책임자 휴무 교차", "라운지별 책임자(매니저/선임) 동시 휴무 불가", "✅ 적합", "전 라운지 책임자 동시 휴무 미발생")
-    else:
-        chk2 = ("책임자 휴무 교차", "라운지별 책임자(매니저/선임) 동시 휴무 불가", "❌ 미흡", f"중첩 발생: {', '.join(overlap_list)}")
+    if not overlap_list: chk2 = ("책임자 휴무 교차", "라운지별 책임자(매니저/선임) 동시 휴무 불가", "✅ 적합", "전 라운지 책임자 동시 휴무 미발생")
+    else: chk2 = ("책임자 휴무 교차", "라운지별 책임자(매니저/선임) 동시 휴무 불가", "❌ 미흡", f"중첩 발생: {', '.join(overlap_list)}")
     checklist.append(chk2)
 
-    # 3. 생휴 제약
+    # 3. 생휴 제약 (이틀연속 강제 적용 확인)
     m_issues = []
     for e, emp in enumerate(emp_list):
         if emp["gender"] == "여":
@@ -335,15 +315,13 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
                     w_idx = datetime.date(year, month, d).weekday()
                     is_mon_thu = (w_idx < 4)
                     has_adj_off = False
-                    if d > 1 and flat_labels[e][d - 2] in ["휴무", "신청휴", "생휴", "휴점"]: has_adj_off = True
-                    if d < num_days and flat_labels[e][d] in ["휴무", "신청휴", "생휴", "휴점"]: has_adj_off = True
+                    if d > 1 and flat_labels[e][d - 2] in off_keywords: has_adj_off = True
+                    if d < num_days and flat_labels[e][d] in off_keywords: has_adj_off = True
                     if not (is_mon_thu and has_adj_off):
                         m_issues.append(f"{emp['name']}({d}일)")
 
-    if not m_issues:
-        chk3 = ("생리휴가 규정 준수", "월~목요일 배정 및 이틀 연속 휴무 보장", "✅ 적합", "전원 월~목 배정 및 연속 휴무 조건 충족")
-    else:
-        chk3 = ("생리휴가 규정 준수", "월~목요일 배정 및 이틀 연속 휴무 보장", "❌ 미흡", f"미충족: {', '.join(m_issues)}")
+    if not m_issues: chk3 = ("생리휴가 규정 준수", "월~목 배정 및 이틀 연속 휴무 반드시 포함", "✅ 적합", "전원 생휴 연속 휴무 조건 충족")
+    else: chk3 = ("생리휴가 규정 준수", "월~목 배정 및 이틀 연속 휴무 반드시 포함", "❌ 미흡", f"미충족: {', '.join(m_issues)}")
     checklist.append(chk3)
 
     # 4. 4연속 근무
@@ -360,28 +338,24 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
         if w_count >= 4: ranges.append(f"{num_days - w_count + 1}~{num_days}일({w_count}연속)")
         if ranges: consecutive4_list.append(f"{emp['name']}[{emp['lounge']}]({', '.join(ranges)})")
 
-    if not consecutive4_list:
-        chk4 = ("4연속 근무 점검", "최대한 3연속 이하 근무 유도 (4연속 기피)", "✅ 미발생", "4연속 이상 근무자 없음")
-    else:
-        chk4 = ("4연속 근무 점검", "최대한 3연속 이하 근무 유도 (4연속 기피)", "⚠️ 발생", f"발생 인원: {', '.join(consecutive4_list)}")
+    if not consecutive4_list: chk4 = ("4연속 근무 점검", "최대한 3연속 이하 근무 유도 (4연속 기피)", "✅ 미발생", "4연속 이상 근무자 없음")
+    else: chk4 = ("4연속 근무 점검", "최대한 3연속 이하 근무 유도 (4연속 기피)", "⚠️ 발생", f"발생 인원: {', '.join(consecutive4_list)}")
     checklist.append(chk4)
 
-    # 5. 목표 휴무일수
+    # 5. 목표 휴무일수 (연차는 카운트에서 제외해야 타겟과 맞음)
     off_mismatch = []
     for e, emp in enumerate(emp_list):
         target_off = male_off_days if emp["gender"] == "남" else female_off_days
-        actual_off_cnt = sum(1 for d in range(1, num_days + 1) if flat_labels[e][d - 1] in ["휴무", "신청휴", "생휴", "휴점"])
-        if actual_off_cnt != target_off:
-            off_mismatch.append(f"{emp['name']}({actual_off_cnt}일)")
+        # 연차를 제외한 순수 휴무(휴무, 신청휴, 생휴, 휴점) 갯수만 합산
+        actual_regular_off_cnt = sum(1 for d in range(1, num_days + 1) if flat_labels[e][d - 1] in ["휴무", "신청휴", "생휴", "휴점"])
+        if actual_regular_off_cnt != target_off:
+            off_mismatch.append(f"{emp['name']}(기본휴무 {actual_regular_off_cnt}일)")
 
-    if not off_mismatch:
-        chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수", "✅ 적합", "전 직원 지정 휴무일수 100% 달성")
-    else:
-        chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수", "❌ 미흡", f"일수 불일치: {', '.join(off_mismatch)}")
+    if not off_mismatch: chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수 (연차 별도)", "✅ 적합", "전 직원 연차 제외 기본 휴무일수 100% 달성")
+    else: chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수 (연차 별도)", "❌ 미흡", f"일수 불일치: {', '.join(off_mismatch)}")
     checklist.append(chk5)
 
     return checklist
-
 
 def export_to_excel_single_sheet(
     lounge_schedules, lounge_employees, all_employees_flat, year, month, output_excel,
@@ -417,6 +391,7 @@ def export_to_excel_single_sheet(
         "휴무": PatternFill(start_color="E0E0E0", fill_type="solid"),
         "신청휴": PatternFill(start_color="C8E6C9", fill_type="solid"),
         "생휴": PatternFill(start_color="FFE0B2", fill_type="solid"),
+        "연차": PatternFill(start_color="E1BEE7", fill_type="solid"),  # 연차 배경 (연보라)
         "휴점": PatternFill(start_color="9E9E9E", fill_type="solid"),
     }
     font_map_excel = {
@@ -424,6 +399,7 @@ def export_to_excel_single_sheet(
         "휴무": Font(name="맑은 고딕", size=9, color="424242"),
         "신청휴": Font(name="맑은 고딕", size=9, bold=True, color="1B5E20"),
         "생휴": Font(name="맑은 고딕", size=9, bold=True, color="E65100"),
+        "연차": Font(name="맑은 고딕", size=9, bold=True, color="4A148C"),  # 연차 글씨 (진보라)
         "휴점": Font(name="맑은 고딕", size=9, bold=True, color="FFFFFF"),
     }
 
@@ -441,7 +417,7 @@ def export_to_excel_single_sheet(
         headers = (
             ["라운지", "직급", "성명", "성별"]
             + [f"{d}일" for d in range(1, num_days + 1)]
-            + ["근무", "휴무", "신청휴", "생휴", "휴점", "휴무총합"]
+            + ["근무", "휴무", "신청휴", "생휴", "연차", "휴점", "휴무총합"]
         )
         for i, h in enumerate(headers, 1):
             c = ws.cell(row=curr_r, column=i, value=h)
@@ -465,8 +441,7 @@ def export_to_excel_single_sheet(
             c_day.alignment = Alignment(horizontal="center", vertical="center")
             c_day.border = border_box
 
-        # 빈 공간 서식 채우기 (휴점 컬럼 추가되어 +11까지)
-        for c in list(range(1, 5)) + list(range(num_days + 5, num_days + 11)):
+        for c in list(range(1, 5)) + list(range(num_days + 5, num_days + 12)):
             cell = ws.cell(row=curr_r, column=c)
             cell.fill = fill_navy
             cell.border = border_box
@@ -495,7 +470,7 @@ def export_to_excel_single_sheet(
             start_letter = get_column_letter(5)
             end_letter = get_column_letter(num_days + 4)
 
-            for i, h in enumerate(["근무", "휴무", "신청휴", "생휴", "휴점"]):
+            for i, h in enumerate(["근무", "휴무", "신청휴", "생휴", "연차", "휴점"]):
                 c_sum = ws.cell(
                     row=curr_r,
                     column=sum_col_start + i,
@@ -504,12 +479,12 @@ def export_to_excel_single_sheet(
                 c_sum.alignment = Alignment(horizontal="center")
                 c_sum.border = border_box
 
-            # 휴무총합 (휴무 ~ 휴점 카운트 셀 합산)
+            # 휴무총합 (휴무 ~ 휴점까지 5개 셀 모두 더함)
             off_start_col = get_column_letter(sum_col_start + 1)
-            off_end_col = get_column_letter(sum_col_start + 4)
+            off_end_col = get_column_letter(sum_col_start + 5)
             c_tot_off = ws.cell(
                 row=curr_r,
-                column=sum_col_start + 5,
+                column=sum_col_start + 6,
                 value=f"=SUM({off_start_col}{curr_r}:{off_end_col}{curr_r})",
             )
             c_tot_off.alignment = Alignment(horizontal="center")
@@ -520,7 +495,6 @@ def export_to_excel_single_sheet(
         last_emp_r = curr_r - 1
         r_att, r_sup, r_act = curr_r, curr_r + 1, curr_r + 2
 
-        # 하단 집계행 세팅
         for r_idx, title, fill, font in [(r_att, "출근인원", fill_att, font_att), 
                                          (r_sup, "타 접점 지원", fill_sup_row, font_sup_row), 
                                          (r_act, "실제 근무인원", fill_act, font_act)]:
@@ -548,12 +522,11 @@ def export_to_excel_single_sheet(
 
         curr_r = r_act + 3
 
-    # 체크리스트 표 생성
     ws.cell(row=curr_r, column=1, value="📋 스케줄 최적화 연산 결과 검증 체크리스트").font = font_section
     curr_r += 1
 
     chk_headers = ["점검 항목", "검증 기준", "점검 결과", "세부 보고 및 미달 내용"]
-    chk_col_spans = [(1, 2), (3, 4), (5, 6), (7, num_days + 11)]
+    chk_col_spans = [(1, 2), (3, 4), (5, 6), (7, num_days + 12)]
 
     for idx, h_text in enumerate(chk_headers):
         s_col, e_col = chk_col_spans[idx]
@@ -585,7 +558,7 @@ def export_to_excel_single_sheet(
             (1, 2, item_name, "center", None, None),
             (3, 4, criteria, "left", None, None),
             (5, 6, status_str, "center", res_fill, res_font),
-            (7, num_days + 11, detail_str, "left", None, None)
+            (7, num_days + 12, detail_str, "left", None, None)
         ]:
             for c in range(s_col, e_col + 1):
                 cell = ws.cell(row=curr_r, column=c)
