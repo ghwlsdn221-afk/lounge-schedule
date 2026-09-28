@@ -25,6 +25,11 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC
 # ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", layout="wide", initial_sidebar_state="expanded")
 
+# 세션 상태(Session State) 초기화: 스케줄 결과 유지용
+if "schedule_generated" not in st.session_state:
+    st.session_state.schedule_generated = False
+    st.session_state.schedule_data = {}
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
@@ -95,16 +100,23 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
-# [수정됨] 스케줄 텍스트 색상 결정 함수 - 실제 출력 텍스트 매칭 및 다크모드 배경색 적용
+# 스케줄 텍스트 색상 결정 함수
 def color_schedule_cells(val):
     val_str = str(val).strip()
-    # 휴무 관련 단어가 포함되어 있을 때 (휴무, 생휴 등)
     if any(keyword in val_str for keyword in ["휴무", "생휴", "연차", "공휴", "반휴", "휴"]):
         return 'color: #FF6B6B; font-weight: bold; background-color: #3A1C1C;'
-    # 근무 관련 단어가 포함되어 있을 때 (근무, 주, 야 등)
     elif any(keyword in val_str for keyword in ["근무", "주", "야", "오픈", "마감", "미들"]):
         return 'color: #4D96FF; font-weight: bold; background-color: #1C2A3A;'
     return ''
+
+# 라운지 정렬을 위한 글로벌 변수 및 함수
+target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
+
+def get_order_weight(name):
+    for idx, target in enumerate(target_order):
+        if target in str(name):
+            return idx
+    return 999 
 
 # ---------------------------------------------------------
 # [메인 화면] 실시간 데이터 로드 및 통계
@@ -129,14 +141,6 @@ else:
             f"</div>", 
             unsafe_allow_html=True
         )
-
-        target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
-        
-        def get_order_weight(name):
-            for idx, target in enumerate(target_order):
-                if target in str(name):
-                    return idx
-            return 999 
 
         if lounge_col and total_submitted > 0:
             lounge_counts = display_df[lounge_col].value_counts().to_dict()
@@ -201,84 +205,101 @@ else:
 
                 if flat_labels is None:
                     st.error("❌ 스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다.")
+                    st.session_state.schedule_generated = False
                 else:
                     st.success("✅ 스케줄 생성이 성공적으로 완료되었습니다.")
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    # ---------------------------------------------------------
-                    # Ⅳ. 결과물 화면 출력
-                    # ---------------------------------------------------------
-                    st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
-                    
-                    _, num_days = calendar.monthrange(year, month)
-                    day_columns = [f"{d}일" for d in range(1, num_days + 1)]
-                    
-                    schedule_data = []
-                    for i, emp in enumerate(all_employees_flat):
-                        schedule_row = list(flat_labels[i])
-                        if len(schedule_row) < num_days:
-                            schedule_row += [""] * (num_days - len(schedule_row))
-                        elif len(schedule_row) > num_days:
-                            schedule_row = schedule_row[:num_days]
-                            
-                        row_data = [emp["raw_lounge"], emp["name"], emp["gender"], emp["rank"]] + schedule_row
-                        schedule_data.append(row_data)
+                    # 연산 결과를 세션 상태에 저장
+                    st.session_state.schedule_generated = True
+                    st.session_state.schedule_data = {
+                        "all_employees_flat": all_employees_flat,
+                        "lounge_employees": lounge_employees,
+                        "flat_labels": flat_labels,
+                        "year": year,
+                        "month": month,
+                        "male_off": male_off,
+                        "female_off": female_off,
+                        "public_holidays": public_holidays
+                    }
 
-                    columns = ["라운지", "이름", "성별", "직급"] + day_columns
-                    res_df = pd.DataFrame(schedule_data, columns=columns)
+        # ---------------------------------------------------------
+        # [결과 출력 영역] - 세션 상태에 데이터가 있으면 항상 출력
+        # ---------------------------------------------------------
+        if st.session_state.schedule_generated:
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # 저장된 데이터 불러오기
+            data = st.session_state.schedule_data
+            all_emp = data["all_employees_flat"]
+            l_emp = data["lounge_employees"]
+            labels = data["flat_labels"]
+            s_year = data["year"]
+            s_month = data["month"]
+            
+            st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
+            
+            _, num_days = calendar.monthrange(s_year, s_month)
+            day_columns = [f"{d}일" for d in range(1, num_days + 1)]
+            
+            schedule_data = []
+            for i, emp in enumerate(all_emp):
+                schedule_row = list(labels[i])
+                if len(schedule_row) < num_days:
+                    schedule_row += [""] * (num_days - len(schedule_row))
+                elif len(schedule_row) > num_days:
+                    schedule_row = schedule_row[:num_days]
                     
-                    for lounge_kw in target_order:
-                        df_lounge = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
-                        
-                        if not df_lounge.empty:
-                            st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>{lounge_kw}</h5>", unsafe_allow_html=True)
-                            st.dataframe(df_lounge.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+                row_data = [emp["raw_lounge"], emp["name"], emp["gender"], emp["rank"]] + schedule_row
+                schedule_data.append(row_data)
 
-                    other_mask = ~res_df['라운지'].str.contains('|'.join(target_order), na=False)
-                    df_other = res_df[other_mask]
-                    if not df_other.empty:
-                        st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>기타 라운지</h5>", unsafe_allow_html=True)
-                        st.dataframe(df_other.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
-                        
-                    st.markdown("<br><hr>", unsafe_allow_html=True)
-                    
-                    # ---------------------------------------------------------
-                    # Ⅴ. 스케줄 검증 리포트
-                    # ---------------------------------------------------------
-                    st.markdown("### Ⅴ. 스케줄 검증 리포트 (Verification Report)")
-                    checklist = verify_schedule_checklist(all_employees_flat, flat_labels, year, month, male_off, female_off)
-                    chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
-                    
-                    def highlight_result(val):
-                        if val == "PASS":
-                            return 'color: #00FF00; font-weight: bold;'
-                        elif val == "FAIL":
-                            return 'color: #FF4B4B; font-weight: bold;'
-                        elif val == "WARNING":
-                            return 'color: #FFA500; font-weight: bold;'
-                        return ''
-                    
-                    st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
-                    st.markdown("<br><hr>", unsafe_allow_html=True)
+            columns = ["라운지", "이름", "성별", "직급"] + day_columns
+            res_df = pd.DataFrame(schedule_data, columns=columns)
+            
+            for lounge_kw in target_order:
+                df_lounge = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
+                if not df_lounge.empty:
+                    st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>{lounge_kw}</h5>", unsafe_allow_html=True)
+                    st.dataframe(df_lounge.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
 
-                    # ---------------------------------------------------------
-                    # Ⅵ. 엑셀 다운로드
-                    # ---------------------------------------------------------
-                    st.markdown("### Ⅵ. 엑셀 다운로드 (Export to Excel)")
-                    lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
-                    for i, e in enumerate(all_employees_flat):
-                        if e["lounge"] in lounge_schedules:
-                            lounge_schedules[e["lounge"]].append(flat_labels[i])
+            other_mask = ~res_df['라운지'].str.contains('|'.join(target_order), na=False)
+            df_other = res_df[other_mask]
+            if not df_other.empty:
+                st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>기타 라운지</h5>", unsafe_allow_html=True)
+                st.dataframe(df_other.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+                
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            
+            st.markdown("### Ⅴ. 스케줄 검증 리포트 (Verification Report)")
+            checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"])
+            chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
+            
+            def highlight_result(val):
+                if val == "PASS":
+                    return 'color: #00FF00; font-weight: bold;'
+                elif val == "FAIL":
+                    return 'color: #FF4B4B; font-weight: bold;'
+                elif val == "WARNING":
+                    return 'color: #FFA500; font-weight: bold;'
+                return ''
+            
+            st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
+            st.markdown("<br><hr>", unsafe_allow_html=True)
 
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
-                        export_to_excel_single_sheet(lounge_schedules, lounge_employees, all_employees_flat, year, month, tmp_excel.name, public_holidays, male_off, female_off)
-                        with open(tmp_excel.name, "rb") as f:
-                            st.download_button(
-                                label="💾 생성된 엑셀 파일 다운로드 (.xlsx)",
-                                data=f.read(),
-                                file_name=f"라운지_월간근무표_{year}년_{month}월.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                type="primary"
-                            )
+            st.markdown("### Ⅵ. 엑셀 다운로드 (Export to Excel)")
+            lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
+            for i, e in enumerate(all_emp):
+                if e["lounge"] in lounge_schedules:
+                    lounge_schedules[e["lounge"]].append(labels[i])
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
+                export_to_excel_single_sheet(lounge_schedules, l_emp, all_emp, s_year, s_month, tmp_excel.name, data["public_holidays"], data["male_off"], data["female_off"])
+                with open(tmp_excel.name, "rb") as f:
+                    st.download_button(
+                        label="💾 생성된 엑셀 파일 다운로드 (.xlsx)",
+                        data=f.read(),
+                        file_name=f"라운지_월간근무표_{s_year}년_{s_month}월.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary"
+                    )
+
     except Exception as e:
         st.error(f"데이터 연산 중 오류가 발생했습니다. (상세 오류: {str(e)})")
