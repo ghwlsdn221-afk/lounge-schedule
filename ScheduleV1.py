@@ -26,7 +26,7 @@ LOUNGE_WORKER_BOUNDS = {
     "자홀": (6, 8),
     "블루": (2, 3),
     "세이지": (2, 3),
-    "YP": (4, 5)     
+    "YP": (3, 5)     # YP 인원 기준 업데이트 (제약조건에서 요일별로 세밀하게 다시 분기됨)
 }
 
 def solve_global_schedule(
@@ -113,7 +113,7 @@ def solve_global_schedule(
                 model.Add(is_off[e, d] == 1).OnlyEnforceIf(is_m)
                 day_m_vars.append((d, is_m))
 
-                # ★ 생휴는 무조건 다른 쉬는 날과 맞닿아 2연휴를 구성해야 함 (Hard Constraint)
+                # 생휴는 무조건 다른 쉬는 날과 맞닿아 2연휴를 구성해야 함 (Hard Constraint)
                 adj_off = []
                 if d > 1:
                     adj_off.append(is_off[e, d - 1])
@@ -157,7 +157,8 @@ def solve_global_schedule(
     for d in range(1, num_days + 1):
         if d in store_closed_days: continue
 
-        is_weekend_or_holiday = (datetime.date(year, month, d).weekday() >= 5) or (d in public_holidays)
+        w_idx = datetime.date(year, month, d).weekday()
+        is_weekend_or_holiday = (w_idx >= 5) or (d in public_holidays)
 
         for l in LOUNGE_LIST:
             working_workers = sum(assign[e, d, l] for e in range(num_emp))
@@ -171,6 +172,20 @@ def solve_global_schedule(
                 model.Add(working_workers - overage <= 2)
                 penalty_vars.append(shortfall * 10000)
                 penalty_vars.append(overage * 2000)
+                
+            elif l == "YP":  # ★ YP 라운지 신규 제약 조건 추가
+                # 금(4), 토(5), 일(6) 또는 공휴일 여부 체크
+                is_yp_busy = (w_idx >= 4) or (d in public_holidays)
+                
+                if is_yp_busy:
+                    model.Add(working_workers + shortfall >= 4) # 금~일 최소 4명
+                else:
+                    model.Add(working_workers + shortfall >= 3) # 월~목 최소 3명
+                    
+                model.Add(working_workers - overage <= 5)       # 최대 5명
+                penalty_vars.append(shortfall * 10000)
+                penalty_vars.append(overage * 2000)
+                
             else:
                 if is_weekend_or_holiday:
                     model.Add(working_workers + shortfall >= max_w)
@@ -306,7 +321,7 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
     else: chk2 = ("책임자 휴무 교차", "라운지별 책임자(매니저/선임) 동시 휴무 불가", "❌ 미흡", f"중첩 발생: {', '.join(overlap_list)}")
     checklist.append(chk2)
 
-    # 3. 생휴 제약 (이틀연속 강제 적용 확인)
+    # 3. 생휴 제약
     m_issues = []
     for e, emp in enumerate(emp_list):
         if emp["gender"] == "여":
@@ -342,11 +357,10 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
     else: chk4 = ("4연속 근무 점검", "최대한 3연속 이하 근무 유도 (4연속 기피)", "⚠️ 발생", f"발생 인원: {', '.join(consecutive4_list)}")
     checklist.append(chk4)
 
-    # 5. 목표 휴무일수 (연차는 카운트에서 제외해야 타겟과 맞음)
+    # 5. 목표 휴무일수
     off_mismatch = []
     for e, emp in enumerate(emp_list):
         target_off = male_off_days if emp["gender"] == "남" else female_off_days
-        # 연차를 제외한 순수 휴무(휴무, 신청휴, 생휴, 휴점) 갯수만 합산
         actual_regular_off_cnt = sum(1 for d in range(1, num_days + 1) if flat_labels[e][d - 1] in ["휴무", "신청휴", "생휴", "휴점"])
         if actual_regular_off_cnt != target_off:
             off_mismatch.append(f"{emp['name']}(기본휴무 {actual_regular_off_cnt}일)")
@@ -391,7 +405,7 @@ def export_to_excel_single_sheet(
         "휴무": PatternFill(start_color="E0E0E0", fill_type="solid"),
         "신청휴": PatternFill(start_color="C8E6C9", fill_type="solid"),
         "생휴": PatternFill(start_color="FFE0B2", fill_type="solid"),
-        "연차": PatternFill(start_color="E1BEE7", fill_type="solid"),  # 연차 배경 (연보라)
+        "연차": PatternFill(start_color="E1BEE7", fill_type="solid"), 
         "휴점": PatternFill(start_color="9E9E9E", fill_type="solid"),
     }
     font_map_excel = {
@@ -399,7 +413,7 @@ def export_to_excel_single_sheet(
         "휴무": Font(name="맑은 고딕", size=9, color="424242"),
         "신청휴": Font(name="맑은 고딕", size=9, bold=True, color="1B5E20"),
         "생휴": Font(name="맑은 고딕", size=9, bold=True, color="E65100"),
-        "연차": Font(name="맑은 고딕", size=9, bold=True, color="4A148C"),  # 연차 글씨 (진보라)
+        "연차": Font(name="맑은 고딕", size=9, bold=True, color="4A148C"),
         "휴점": Font(name="맑은 고딕", size=9, bold=True, color="FFFFFF"),
     }
 
@@ -479,7 +493,7 @@ def export_to_excel_single_sheet(
                 c_sum.alignment = Alignment(horizontal="center")
                 c_sum.border = border_box
 
-            # 휴무총합 (휴무 ~ 휴점까지 5개 셀 모두 더함)
+            # 휴무총합 (휴무 ~ 휴점)
             off_start_col = get_column_letter(sum_col_start + 1)
             off_end_col = get_column_letter(sum_col_start + 5)
             c_tot_off = ws.cell(
