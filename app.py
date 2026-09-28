@@ -13,19 +13,118 @@ from ScheduleV1 import (
     LOUNGE_ALIAS
 )
 
-# 웹 페이지 기본 설정 (넓은 화면 모드)
-st.set_page_config(page_title="라운지 근무표 생성기", layout="wide")
+# ---------------------------------------------------------
+# [웹 페이지 기본 설정]
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="VIP Lounge Schedule System", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# 헤더 제목
-st.title("📅 전 라운지 통합 근무 스케줄 생성기")
-st.write("파이썬 OR-Tools 최적화 엔진으로 100% 조건에 맞는 스케줄을 자동 생성합니다.")
+# ---------------------------------------------------------
+# [커스텀 CSS 주입] 백화점 VIP 라운지 테마 (블랙 & 샴페인 골드)
+# ---------------------------------------------------------
+st.markdown("""
+<style>
+    /* 구글 폰트(명조체) 불러오기 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
+    
+    /* 전체 폰트 적용 및 배경색 (차분한 다크톤) */
+    html, body, [class*="css"]  {
+        font-family: 'Noto Serif KR', serif !important;
+    }
+    
+    .stApp {
+        background-color: #121212;
+    }
+
+    /* 텍스트 및 헤더 컬러 (샴페인 골드 & 실버 그레이) */
+    h1, h2, h3, h4, h5, h6 {
+        color: #D4AF37 !important; 
+        font-weight: 300 !important;
+        letter-spacing: 1.5px;
+    }
+    
+    p, span, label, div {
+        color: #C0C0C0 !important;
+    }
+
+    /* 사이드바 스타일링 */
+    [data-testid="stSidebar"] {
+        background-color: #1A1A1A !important;
+        border-right: 1px solid #333333 !important;
+    }
+    
+    /* 사이드바 입력창 테두리 골드 포인트 */
+    .stNumberInput > div > div > div, .stTextInput > div > div > div {
+        border-color: #333333 !important;
+    }
+    .stNumberInput > div > div > div:focus-within, .stTextInput > div > div > div:focus-within {
+        border-color: #D4AF37 !important;
+        box-shadow: 0 0 5px rgba(212, 175, 55, 0.3) !important;
+    }
+
+    /* 고급스러운 버튼 스타일링 (명품 브랜드 스타일 - 테두리 얇게, 호버시 반전) */
+    div.stButton > button:first-child {
+        background-color: transparent !important;
+        color: #D4AF37 !important;
+        border: 1px solid #D4AF37 !important;
+        border-radius: 0px !important; /* 각진 테두리로 모던함 강조 */
+        padding: 0.5rem 2rem !important;
+        transition: all 0.4s ease-in-out !important;
+        font-weight: 400 !important;
+        letter-spacing: 1px;
+    }
+    
+    div.stButton > button:first-child:hover {
+        background-color: #D4AF37 !important;
+        color: #121212 !important;
+        box-shadow: 0px 4px 15px rgba(212, 175, 55, 0.3) !important;
+    }
+
+    /* 파일 업로더 점선 테두리 */
+    [data-testid="stFileUploadDropzone"] {
+        border: 1px dashed #D4AF37 !important;
+        background-color: #181818 !important;
+        border-radius: 0px !important;
+    }
+    
+    /* 데이터 프레임 컨테이너 */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #333333 !important;
+    }
+
+    /* Streamlit 기본 브랜딩 숨기기 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* 구분선 골드 컬러 */
+    hr {
+        border-top: 1px solid #D4AF37 !important;
+        opacity: 0.3;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# [헤더 영역] 타이틀 중앙 정렬 및 서브 타이틀
+# ---------------------------------------------------------
+st.markdown("<h1 style='text-align: center; border-bottom: 1px solid #D4AF37; padding-bottom: 20px; margin-bottom: 20px;'>THE LOUNGE <br><span style='font-size: 0.5em;'>INTEGRATED SCHEDULE MANAGER</span></h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 1.1em; margin-bottom: 40px;'>최상의 고객 서비스를 위한 프리미엄 라운지 통합 스케줄링 시스템입니다.</p>", unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------
 # [사이드바] 연산 설정 영역
 # ---------------------------------------------------------
-st.sidebar.header("⚙️ 기본 연산 설정")
-year = st.sidebar.number_input("연도", value=2026, step=1)
-month = st.sidebar.number_input("월", value=10, min_value=1, max_value=12, step=1)
+st.sidebar.markdown("<h3>Operation Settings</h3>", unsafe_allow_html=True)
+st.sidebar.markdown("<hr>", unsafe_allow_html=True)
+
+year = st.sidebar.number_input("연도 (Year)", value=2026, step=1)
+month = st.sidebar.number_input("월 (Month)", value=10, min_value=1, max_value=12, step=1)
+
+st.sidebar.markdown("<br>", unsafe_allow_html=True)
+
 male_off = st.sidebar.number_input("남성 목표 휴무일수", value=11, step=1)
 female_off = st.sidebar.number_input("여성 목표 휴무일수", value=12, step=1)
 holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="3, 9")
@@ -33,10 +132,13 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 # 공휴일 텍스트를 리스트로 변환
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
+st.sidebar.markdown("<br><br><br><p style='text-size:0.8em; color:#666 !important; text-align:center;'>Powered by OR-Tools Engine</p>", unsafe_allow_html=True)
+
 # ---------------------------------------------------------
 # [메인 화면] 파일 업로드 및 스케줄 생성
 # ---------------------------------------------------------
-uploaded_file = st.file_uploader("📂 직원 CSV 파일 업로드", type=["csv"])
+st.markdown("### Ⅰ. 직원 명단 업로드 (Upload Roster)")
+uploaded_file = st.file_uploader("직원 데이터 CSV 파일을 업로드해 주십시오.", type=["csv"])
 
 if uploaded_file is not None:
     # 1. 업로드된 CSV 데이터 미리보기
@@ -46,12 +148,16 @@ if uploaded_file is not None:
         uploaded_file.seek(0)
         df_input = pd.read_csv(uploaded_file, encoding="cp949")
 
-    st.subheader("👥 불러온 직원 목록")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### Ⅱ. 불러온 직원 목록 (Employee Roster)")
     st.dataframe(df_input, use_container_width=True)
+    
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-    # 2. 스케줄 생성 버튼
-    if st.button("⚡ 스케줄 자동 생성 (OR-Tools 최적화)", type="primary"):
-        with st.spinner("최적화 엔진 연산 중... 잠시만 기다려주세요."):
+    # 2. 스케줄 생성 버튼 (디자인 적용됨)
+    st.markdown("### Ⅲ. 스케줄 최적화 (Optimization)")
+    if st.button("스케줄 자동 생성 시작", type="primary"):
+        with st.spinner("최적화 엔진 연산 중입니다. 잠시만 기다려 주십시오..."):
             
             # 직원 데이터 구조화 (ScheduleV1 형식 변환)
             name_col = next((c for c in df_input.columns if "이름" in c or "성명" in c), df_input.columns[0])
@@ -90,12 +196,14 @@ if uploaded_file is not None:
             )
 
             if flat_labels is None:
-                st.error("❌ 스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다.")
+                st.error("스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다. (휴무 조건 완화 요망)")
             else:
-                st.success("🎉 스케줄 생성이 완료되었습니다!")
+                st.success("스케줄 생성이 성공적으로 완료되었습니다.")
 
+                st.markdown("<br>", unsafe_allow_html=True)
+                
                 # 3. 검증 체크리스트 표시
-                st.subheader("📋 스케줄 최적화 결과 검증 체크리스트")
+                st.markdown("### Ⅳ. 스케줄 검증 리포트 (Verification Report)")
                 checklist = verify_schedule_checklist(
                     all_employees_flat, flat_labels, year, month, male_off, female_off
                 )
@@ -103,7 +211,10 @@ if uploaded_file is not None:
                 chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
                 st.dataframe(chk_df, use_container_width=True)
 
+                st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
                 # 4. 엑셀 파일 다운로드 제공
+                st.markdown("### Ⅴ. 결과물 다운로드 (Export)")
                 lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
                 for i, e in enumerate(all_employees_flat):
                     lounge_schedules[e["lounge"]].append(flat_labels[i])
@@ -116,9 +227,9 @@ if uploaded_file is not None:
                     
                     with open(tmp_excel.name, "rb") as f:
                         st.download_button(
-                            label="📊 생성된 엑셀 파일 다운로드 (.xlsx)",
+                            label="생성된 엑셀 파일 다운로드 (.xlsx)",
                             data=f.read(),
-                            file_name=f"월간근무표_{year}년_{month}월.xlsx",
+                            file_name=f"라운지_월간근무표_{year}년_{month}월.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             type="primary"
                         )
