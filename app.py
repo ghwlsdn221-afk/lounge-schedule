@@ -207,6 +207,20 @@ def get_order_weight(name):
             return idx
     return 999 
 
+# 👇 [여기에 헬퍼 함수 추가] 빈칸 제거 및 전체 셀에 다크모드 배경색을 입히는 함수
+def apply_dark_style(df):
+    return df.fillna("").style.set_properties(**{
+        'background-color': '#161616',
+        'color': '#E0E0E0',
+        'border-color': '#333333'
+    })
+
+def get_order_weight(name):
+    for idx, target in enumerate(target_order):
+        if target in str(name):
+            return idx
+    return 999 
+
 # ---------------------------------------------------------
 # [메인 화면] 실시간 데이터 로드 및 통계
 # ---------------------------------------------------------
@@ -250,7 +264,7 @@ else:
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("### Ⅱ. 직원 명단 상세 (Roster Details)")
         st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(apply_dark_style(display_df), use_container_width=True)
         st.markdown("<br><hr>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------
@@ -352,13 +366,13 @@ else:
                 df_lounge = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
                 if not df_lounge.empty:
                     st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>{lounge_kw}</h5>", unsafe_allow_html=True)
-                    st.dataframe(df_lounge.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+                    st.dataframe(apply_dark_style(df_lounge).map(color_schedule_cells, subset=day_columns), use_container_width=True)
 
             other_mask = ~res_df['라운지'].str.contains('|'.join(target_order), na=False)
             df_other = res_df[other_mask]
             if not df_other.empty:
                 st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>기타 라운지</h5>", unsafe_allow_html=True)
-                st.dataframe(df_other.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+                st.dataframe(apply_dark_style(df_other).map(color_schedule_cells, subset=day_columns), use_container_width=True)
                 
             st.markdown("<br><hr>", unsafe_allow_html=True)
 
@@ -418,7 +432,7 @@ else:
                         return 'color: #4D96FF; font-weight: bold;'
                 return ''
                 
-            st.dataframe(daily_stats_df.style.map(style_daily_stats), use_container_width=True)
+            st.dataframe(apply_dark_style(daily_stats_df).map(style_daily_stats), use_container_width=True)
             st.markdown("<br><hr>", unsafe_allow_html=True)
             
             # ---------------------------------------------------------
@@ -438,7 +452,7 @@ else:
                     return 'color: #FFA500; font-weight: bold;'
                 return ''
             
-            st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
+            st.dataframe(apply_dark_style(chk_df).map(highlight_result, subset=['점검 결과']), use_container_width=True)
             st.markdown("<br><hr>", unsafe_allow_html=True)
 
             # ---------------------------------------------------------
