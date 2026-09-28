@@ -46,7 +46,33 @@ if "schedule_generated" not in st.session_state:
 # CSS: 스케줄 앱 메인 화면용 CSS
 # ... (이하 기존 스케줄 코드 그대로 유지) ...
 # CSS: 스케줄 앱 메인 화면용 CSS
+
+# [VIP Lounge] 하단 하얀색 테두리 및 Streamlit 워터마크 강제 제거 CSS
+hide_streamlit_ui = """
+<style>
+    /* 1. 기본 헤더 및 푸터 완벽 숨김 */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* 2. 'Built with Streamlit' 워터마크 및 전체화면 버튼 강제 숨김 */
+    .viewerBadge_container__1QSob {display: none !important;}
+    .viewerBadge_link__1S137 {display: none !important;}
+    div[class^="viewerBadge"] {display: none !important;}
+    
+    /* 3. 하단 여백 및 하얀색 바(Bottom Bar) 제거 */
+    div[data-testid="stBottom"] {display: none !important;}
+    
+    /* 4. 앱 내부 상하좌우 여백 최소화 (HTML과 자연스럽게 연결되도록) */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
+</style>
+"""
+st.markdown(hide_streamlit_ui, unsafe_allow_html=True)
+
 st.markdown("""
+
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
     
