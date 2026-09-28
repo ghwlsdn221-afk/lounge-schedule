@@ -17,18 +17,18 @@ from ScheduleV1 import (
 )
 
 # =========================================================
-# 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
+# 🛑 관리자 설정
 # =========================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
 CACHE_FILE = "cached_schedule.pkl"
 
-# ---------------------------------------------------------
 # [웹 페이지 기본 설정 및 커스텀 CSS]
-# ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", page_icon="👑", layout="wide", initial_sidebar_state="expanded")
 
+# ❌ (이곳에 있던 PASSWORD = "vip2026" 부터 st.stop() 까지의 보안 게이트웨이 코드를 전부 지워주세요!) ❌
+
 # =========================================================
-# 🔄 세션 상태 및 로컬 파일 연동
+# 🔄 세션 상태 및 로컬 파일 연동 (여기서부터 바로 스케줄 앱 시작)
 # =========================================================
 if "schedule_generated" not in st.session_state:
     if os.path.exists(CACHE_FILE):
@@ -43,6 +43,8 @@ if "schedule_generated" not in st.session_state:
         st.session_state.schedule_generated = False
         st.session_state.schedule_data = {}
 
+# CSS: 스케줄 앱 메인 화면용 CSS
+# ... (이하 기존 스케줄 코드 그대로 유지) ...
 # CSS: 스케줄 앱 메인 화면용 CSS
 st.markdown("""
 <style>
