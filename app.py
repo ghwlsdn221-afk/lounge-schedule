@@ -43,7 +43,6 @@ st.markdown("""
         border-color: #D4AF37 !important; box-shadow: 0 0 5px rgba(212, 175, 55, 0.4) !important;
     }
     
-    /* 고급스러운 버튼 스타일링 */
     div.stButton > button:first-child {
         background-color: #1a1a1a !important; color: #D4AF37 !important; border: 1px solid #D4AF37 !important;
         border-radius: 4px !important; padding: 0.6rem 2rem !important; transition: all 0.3s ease !important;
@@ -53,13 +52,11 @@ st.markdown("""
         background-color: #D4AF37 !important; color: #0d0d0d !important; box-shadow: 0 4px 12px rgba(212,175,55,0.3) !important; 
     }
     
-    /* 데이터프레임 스타일링 */
     [data-testid="stDataFrame"] { border: 1px solid #333333 !important; border-radius: 8px; overflow: hidden; }
     
     #MainMenu, footer {visibility: hidden;}
     hr { border-top: 1px solid #D4AF37 !important; opacity: 0.2; margin: 2rem 0; }
     
-    /* 대시보드 총원 박스 */
     .total-box {
         background: linear-gradient(145deg, #1a1a1a, #121212);
         border: 1px solid #333;
@@ -98,15 +95,15 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
-# 스케줄 텍스트 색상 결정 함수 (Dataframe Style 적용용)
+# [수정됨] 스케줄 텍스트 색상 결정 함수 - 실제 출력 텍스트 매칭 및 다크모드 배경색 적용
 def color_schedule_cells(val):
     val_str = str(val).strip()
-    if val_str in ["휴", "생", "연", "공휴", "반휴"]:
-        # 휴무 관련: 옅은 붉은색 톤
-        return 'color: #FF6B6B; font-weight: bold; background-color: rgba(255, 107, 107, 0.1);'
-    elif val_str in ["주", "야", "오픈", "마감", "미들"]:
-        # 근무 관련: 옅은 푸른색 톤
-        return 'color: #4D96FF; font-weight: bold; background-color: rgba(77, 150, 255, 0.1);'
+    # 휴무 관련 단어가 포함되어 있을 때 (휴무, 생휴 등)
+    if any(keyword in val_str for keyword in ["휴무", "생휴", "연차", "공휴", "반휴", "휴"]):
+        return 'color: #FF6B6B; font-weight: bold; background-color: #3A1C1C;'
+    # 근무 관련 단어가 포함되어 있을 때 (근무, 주, 야 등)
+    elif any(keyword in val_str for keyword in ["근무", "주", "야", "오픈", "마감", "미들"]):
+        return 'color: #4D96FF; font-weight: bold; background-color: #1C2A3A;'
     return ''
 
 # ---------------------------------------------------------
@@ -209,7 +206,7 @@ else:
                     st.markdown("<br>", unsafe_allow_html=True)
                     
                     # ---------------------------------------------------------
-                    # Ⅳ. 결과물 화면 출력 (라운지별 분할 표시 & 색상 반영)
+                    # Ⅳ. 결과물 화면 출력
                     # ---------------------------------------------------------
                     st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
                     
@@ -230,17 +227,13 @@ else:
                     columns = ["라운지", "이름", "성별", "직급"] + day_columns
                     res_df = pd.DataFrame(schedule_data, columns=columns)
                     
-                    # 라운지별로 분할하여 화면에 표시
                     for lounge_kw in target_order:
-                        # 해당 라운지 데이터만 추출
                         df_lounge = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
                         
                         if not df_lounge.empty:
                             st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>{lounge_kw}</h5>", unsafe_allow_html=True)
-                            # 'map'을 사용하여 근무/휴무 색상 스타일 적용
                             st.dataframe(df_lounge.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
 
-                    # 지정된 5개 라운지에 속하지 않는 '기타' 라운지가 있을 경우 처리
                     other_mask = ~res_df['라운지'].str.contains('|'.join(target_order), na=False)
                     df_other = res_df[other_mask]
                     if not df_other.empty:
@@ -265,12 +258,11 @@ else:
                             return 'color: #FFA500; font-weight: bold;'
                         return ''
                     
-                    # pandas 최신 버전에 맞춰 applymap -> map으로 수정됨
                     st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
                     st.markdown("<br><hr>", unsafe_allow_html=True)
 
                     # ---------------------------------------------------------
-                    # Ⅵ. 엑셀 다운로드 (오류가 수정되어 정상 작동)
+                    # Ⅵ. 엑셀 다운로드
                     # ---------------------------------------------------------
                     st.markdown("### Ⅵ. 엑셀 다운로드 (Export to Excel)")
                     lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
