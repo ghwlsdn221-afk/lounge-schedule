@@ -5,6 +5,7 @@ import os
 import datetime
 import calendar
 import pickle
+import base64  # 추가된 모듈 (비밀번호 암호화 티켓 검사용)
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -16,112 +17,69 @@ from ScheduleV1 import (
     LOUNGE_ALIAS
 )
 
-# =========================================================
-# 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
-# =========================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
 CACHE_FILE = "cached_schedule.pkl"
 
-# ---------------------------------------------------------
-# [웹 페이지 기본 설정 및 커스텀 CSS]
-# ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", page_icon="👑", layout="wide", initial_sidebar_state="expanded")
 
 # =========================================================
-# 🔒 보안 게이트웨이 (홈페이지와 100% 동일한 UI 구현)
+# 🔒 보안 게이트웨이 & 프리패스 티켓 확인
 # =========================================================
 PASSWORD = "vip2026"
+ENCODED_PWD = base64.b64encode(PASSWORD.encode()).decode() # 암호화된 티켓 값
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
+# 💡 1. 주소창을 검사해서 프리패스 티켓(?auth=...)이 들어있으면 자동 로그인!
 if not st.session_state.authenticated:
-    # 로그인 화면 전용 CSS 적용 (사이드바 숨김 및 홈페이지 디자인 복제)
+    query_params = st.query_params
+    if "auth" in query_params and query_params["auth"] == ENCODED_PWD:
+        st.session_state.authenticated = True
+        st.query_params.clear() # 깔끔하게 주소창에서 티켓을 지움 (보안)
+
+# 💡 2. 인증이 안 됐을 때만 로그인 화면 표시
+if not st.session_state.authenticated:
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
-        
-        /* 전체 폰트 및 배경 통일 */
-        html, body, [class*="css"] {
-            font-family: 'Noto Serif KR', serif !important;
-        }
-        .stApp {
-            background-color: #050505 !important;
-            background-image: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #050505 100%) !important;
-        }
-        
-        /* 로그인 전에는 헤더와 사이드바를 완벽히 숨김 */
-        [data-testid="stSidebar"] { display: none !important; }
-        [data-testid="collapsedControl"] { display: none !important; }
-        header { display: none !important; }
-        
-        /* 중앙 로그인 박스 (가운데 컬럼 CSS 타겟팅) */
+        html, body, [class*="css"] { font-family: 'Noto Serif KR', serif !important; }
+        .stApp { background-color: #050505 !important; background-image: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #050505 100%) !important; }
+        [data-testid="stSidebar"], [data-testid="collapsedControl"], header { display: none !important; }
         [data-testid="column"]:nth-of-type(2) {
-            background: rgba(20, 20, 20, 0.8) !important;
-            backdrop-filter: blur(10px) !important;
-            border: 1px solid #2a2a2a !important;
-            border-top: 3px solid #D4AF37 !important;
-            padding: 40px 30px !important;
-            border-radius: 12px !important;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8) !important;
-            margin-top: 15vh;
+            position: fixed !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important;
+            background: rgba(20, 20, 20, 0.8) !important; backdrop-filter: blur(10px) !important;
+            border: 1px solid #2a2a2a !important; border-top: 3px solid #D4AF37 !important; padding: 50px 40px !important;
+            border-radius: 12px !important; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8) !important;
+            width: 90% !important; max-width: 400px !important; min-width: 320px !important; z-index: 9999;
         }
-
-        /* 폰트 애니메이션 효과 (홈페이지 동일) */
-        @keyframes goldGlow {
-            0% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
-            50% { text-shadow: 0 0 25px rgba(212, 175, 55, 0.6); }
-            100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
-        }
-        .brand-title {
-            animation: goldGlow 4s infinite alternate;
-        }
-
-        /* 입력창 디자인 커스텀 (홈페이지 동일) */
-        .stTextInput > div > div > input {
-            background-color: transparent !important;
-            border: none !important;
-            color: #fff !important;
-            text-align: center !important;
-            letter-spacing: 5px !important;
-            font-size: 1.2em !important;
-            padding: 10px !important;
-        }
-        .stTextInput > div > div {
-            background-color: transparent !important;
-            border: none !important;
-            border-bottom: 1px solid #444 !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-        }
-        .stTextInput > div > div:focus-within {
-            border-bottom: 1px solid #D4AF37 !important;
-            box-shadow: 0 10px 10px -10px rgba(212, 175, 55, 0.5) !important;
-        }
+        @keyframes goldGlow { 0% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); } 50% { text-shadow: 0 0 25px rgba(212, 175, 55, 0.6); } 100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); } }
+        .brand-title { animation: goldGlow 4s infinite alternate; }
+        .stTextInput > div > div > input { background-color: transparent !important; border: none !important; color: #fff !important; text-align: center !important; letter-spacing: 5px !important; font-size: 1.2em !important; padding: 15px !important; }
+        .stTextInput > div > div { background-color: transparent !important; border: none !important; border-bottom: 1px solid #444 !important; border-radius: 0 !important; box-shadow: none !important; }
+        .stTextInput > div > div:focus-within { border-bottom: 1px solid #D4AF37 !important; box-shadow: 0 10px 10px -10px rgba(212, 175, 55, 0.5) !important; }
     </style>
     """, unsafe_allow_html=True)
     
-    # 3개의 컬럼으로 나누어 가운데(col2)에 로그인 창을 배치
-    col1, col2, col3 = st.columns([1, 1.3, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        # 타이틀 문구 (홈페이지와 100% 동일)
         st.markdown("""
         <div style="text-align: center;">
             <span style="font-size: 0.9em; color: #888; letter-spacing: 4px; font-weight: 300; margin-bottom: 10px; display: block;">HYUNDAI PANGYO</span>
             <h1 class="brand-title" style="font-size: 2.2em; color: #D4AF37; margin: 0 0 30px 0; font-weight: 400; letter-spacing: 2px;">VIP LOUNGE</h1>
         </div>
         """, unsafe_allow_html=True)
-        
-        # 패스워드 입력창
         pwd = st.text_input("PASSCODE", type="password", placeholder="PASSCODE", label_visibility="hidden")
         if pwd == PASSWORD:
             st.session_state.authenticated = True
-            st.rerun()  # 인증 성공 시 페이지를 새로고침하여 메인 스케줄 화면으로 이동
+            st.rerun()
         elif pwd:
-            st.markdown("<div style='color: #FF6B6B; text-align: center; font-size: 0.85em; margin-top: 10px;'>올바르지 않은 패스코드입니다.</div>", unsafe_allow_html=True)
-            
-    st.stop()  # 🛑 여기서 코드를 멈춰서 비밀번호 통과 전까지 스케줄 앱이 실행되지 않도록 차단
+            st.markdown("<div style='color: #FF6B6B; text-align: center; font-size: 0.85em; margin-top: 15px;'>올바르지 않은 패스코드입니다.</div>", unsafe_allow_html=True)
+    st.stop() 
 
+# (이하 기존 코드 유지...)
+if "schedule_generated" not in st.session_state:
+# ...
 # =========================================================
 # 🔄 세션 상태 및 로컬 파일 연동 (인증 성공 시 여기서부터 실행)
 # =========================================================
