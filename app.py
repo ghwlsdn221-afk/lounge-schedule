@@ -25,10 +25,105 @@ CACHE_FILE = "cached_schedule.pkl"
 # ---------------------------------------------------------
 # [웹 페이지 기본 설정 및 커스텀 CSS]
 # ---------------------------------------------------------
-st.set_page_config(page_title="VIP Lounge Schedule System", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="VIP Lounge Schedule System", page_icon="👑", layout="wide", initial_sidebar_state="expanded")
 
 # =========================================================
-# 🔄 세션 상태 및 로컬 파일 연동 (새로고침 방어 로직)
+# 🔒 보안 게이트웨이 (홈페이지와 100% 동일한 UI 구현)
+# =========================================================
+PASSWORD = "vip2026"
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    # 로그인 화면 전용 CSS 적용 (사이드바 숨김 및 홈페이지 디자인 복제)
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
+        
+        /* 전체 폰트 및 배경 통일 */
+        html, body, [class*="css"] {
+            font-family: 'Noto Serif KR', serif !important;
+        }
+        .stApp {
+            background-color: #050505 !important;
+            background-image: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #050505 100%) !important;
+        }
+        
+        /* 로그인 전에는 헤더와 사이드바를 완벽히 숨김 */
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+        header { display: none !important; }
+        
+        /* 중앙 로그인 박스 (가운데 컬럼 CSS 타겟팅) */
+        [data-testid="column"]:nth-of-type(2) {
+            background: rgba(20, 20, 20, 0.8) !important;
+            backdrop-filter: blur(10px) !important;
+            border: 1px solid #2a2a2a !important;
+            border-top: 3px solid #D4AF37 !important;
+            padding: 40px 30px !important;
+            border-radius: 12px !important;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8) !important;
+            margin-top: 15vh;
+        }
+
+        /* 폰트 애니메이션 효과 (홈페이지 동일) */
+        @keyframes goldGlow {
+            0% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
+            50% { text-shadow: 0 0 25px rgba(212, 175, 55, 0.6); }
+            100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); }
+        }
+        .brand-title {
+            animation: goldGlow 4s infinite alternate;
+        }
+
+        /* 입력창 디자인 커스텀 (홈페이지 동일) */
+        .stTextInput > div > div > input {
+            background-color: transparent !important;
+            border: none !important;
+            color: #fff !important;
+            text-align: center !important;
+            letter-spacing: 5px !important;
+            font-size: 1.2em !important;
+            padding: 10px !important;
+        }
+        .stTextInput > div > div {
+            background-color: transparent !important;
+            border: none !important;
+            border-bottom: 1px solid #444 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        .stTextInput > div > div:focus-within {
+            border-bottom: 1px solid #D4AF37 !important;
+            box-shadow: 0 10px 10px -10px rgba(212, 175, 55, 0.5) !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # 3개의 컬럼으로 나누어 가운데(col2)에 로그인 창을 배치
+    col1, col2, col3 = st.columns([1, 1.3, 1])
+    with col2:
+        # 타이틀 문구 (홈페이지와 100% 동일)
+        st.markdown("""
+        <div style="text-align: center;">
+            <span style="font-size: 0.9em; color: #888; letter-spacing: 4px; font-weight: 300; margin-bottom: 10px; display: block;">HYUNDAI PANGYO</span>
+            <h1 class="brand-title" style="font-size: 2.2em; color: #D4AF37; margin: 0 0 30px 0; font-weight: 400; letter-spacing: 2px;">VIP LOUNGE</h1>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 패스워드 입력창
+        pwd = st.text_input("PASSCODE", type="password", placeholder="PASSCODE", label_visibility="hidden")
+        if pwd == PASSWORD:
+            st.session_state.authenticated = True
+            st.rerun()  # 인증 성공 시 페이지를 새로고침하여 메인 스케줄 화면으로 이동
+        elif pwd:
+            st.markdown("<div style='color: #FF6B6B; text-align: center; font-size: 0.85em; margin-top: 10px;'>올바르지 않은 패스코드입니다.</div>", unsafe_allow_html=True)
+            
+    st.stop()  # 🛑 여기서 코드를 멈춰서 비밀번호 통과 전까지 스케줄 앱이 실행되지 않도록 차단
+
+# =========================================================
+# 🔄 세션 상태 및 로컬 파일 연동 (인증 성공 시 여기서부터 실행)
 # =========================================================
 if "schedule_generated" not in st.session_state:
     if os.path.exists(CACHE_FILE):
@@ -43,7 +138,7 @@ if "schedule_generated" not in st.session_state:
         st.session_state.schedule_generated = False
         st.session_state.schedule_data = {}
 
-# CSS: 모바일 반응형(Media Query) 적용
+# CSS: 스케줄 앱 메인 화면용 CSS (기존 스타일 유지)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
@@ -76,7 +171,6 @@ st.markdown("""
     #MainMenu, footer {visibility: hidden;}
     hr { border-top: 1px solid #D4AF37 !important; opacity: 0.2; margin: 2rem 0; }
     
-    /* 기본(PC) 대시보드 카드 스타일 */
     .total-box {
         background: linear-gradient(145deg, #1a1a1a, #121212); border: 1px solid #333;
         border-top: 3px solid #D4AF37; border-radius: 10px; padding: 30px;
@@ -93,7 +187,6 @@ st.markdown("""
     .lounge-count { color: #D4AF37; font-size: 26px; font-weight: bold; }
     .lounge-unit { font-size: 13px; color: #666; font-weight: normal; }
 
-    /* 📱 모바일(화면 너비 768px 이하) 최적화 스타일 */
     @media (max-width: 768px) {
         h1 { font-size: 1.8rem !important; }
         .total-box { padding: 15px; margin-bottom: 15px; }
@@ -311,7 +404,7 @@ else:
             st.markdown("<br><hr>", unsafe_allow_html=True)
 
             # ---------------------------------------------------------
-            # [새로 추가된 섹션] Ⅴ. 스케줄 요약 및 통계 (엑셀 하단 통계 동일 구현)
+            # Ⅴ. 스케줄 요약 및 통계
             # ---------------------------------------------------------
             st.markdown("### Ⅴ. 스케줄 요약 및 일자별 통계 (Summary & Daily Stats)")
             
@@ -345,15 +438,12 @@ else:
             st.markdown("<h5 style='color: #D4AF37; margin-top: 30px;'>2. 일자별 전체 근무 통계</h5>", unsafe_allow_html=True)
             
             daily_stats = []
-            
-            # 전체 통계 계산
             total_working = [res_df[day].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum() for day in day_columns]
             total_off = [res_df[day].isin(["휴무", "휴", "생휴", "반휴"]).sum() for day in day_columns]
             
             daily_stats.append(["총 출근 인원"] + total_working)
             daily_stats.append(["총 휴무 인원"] + total_off)
             
-            # 라운지별 통계 계산
             for lounge_kw in target_order:
                 df_l = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
                 if not df_l.empty:
@@ -361,21 +451,17 @@ else:
                     daily_stats.append([f"{lounge_kw} 출근 인원"] + lounge_working)
             
             daily_stats_df = pd.DataFrame(daily_stats, columns=["구분"] + day_columns)
-            
-            # 구분을 인덱스로 설정하여 보기 좋게 구성
             daily_stats_df = daily_stats_df.set_index("구분")
             
-            # 통계 스타일링
             def style_daily_stats(val):
                 if isinstance(val, (int, float)):
-                    if val < 2:  # 인원이 너무 적을 때 경고 표시 (숫자는 환경에 맞게 조정 가능)
+                    if val < 2:  
                         return 'color: #FF6B6B; font-weight: bold;'
-                    elif val >= 4: # 인원이 충분할 때
+                    elif val >= 4: 
                         return 'color: #4D96FF; font-weight: bold;'
                 return ''
                 
             st.dataframe(daily_stats_df.style.map(style_daily_stats), use_container_width=True)
-
             st.markdown("<br><hr>", unsafe_allow_html=True)
             
             # ---------------------------------------------------------
