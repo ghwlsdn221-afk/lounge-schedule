@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import tempfile
 import os
+import datetime
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -13,8 +14,13 @@ from ScheduleV1 import (
     LOUNGE_ALIAS
 )
 
+# =========================================================
+# 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
+# =========================================================
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1hsHa9MvFwMs3mdDA4u6Fb5St7xEdQltSjcaY6OgcfbA/edit?usp=sharing"
+
 # ---------------------------------------------------------
-# [웹 페이지 기본 설정 및 커스텀 CSS (VIP 라운지 테마)]
+# [웹 페이지 기본 설정 및 커스텀 CSS]
 # ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", layout="wide", initial_sidebar_state="expanded")
 
@@ -38,27 +44,28 @@ st.markdown("""
     [data-testid="stDataFrame"] { border: 1px solid #333333 !important; }
     #MainMenu, footer {visibility: hidden;}
     hr { border-top: 1px solid #D4AF37 !important; opacity: 0.3; }
+    
+    /* 대시보드 메트릭 박스 스타일링 */
+    [data-testid="stMetricValue"] { color: #D4AF37 !important; font-size: 1.8rem !important; }
+    [data-testid="stMetricLabel"] { color: #C0C0C0 !important; font-size: 1rem !important; margin-bottom: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# [헤더 영역]
-# ---------------------------------------------------------
 st.markdown("<h1 style='text-align: center; border-bottom: 1px solid #D4AF37; padding-bottom: 20px; margin-bottom: 20px;'>THE LOUNGE <br><span style='font-size: 0.5em;'>INTEGRATED SCHEDULE MANAGER</span></h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; font-size: 1.1em; margin-bottom: 40px;'>구글 시트 실시간 연동 기반 스케줄링 시스템입니다.</p>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# [사이드바] 연산 설정 및 DB 연동
+# [사이드바] 연산 설정
 # ---------------------------------------------------------
-st.sidebar.markdown("<h3>Operation Settings</h3>", unsafe_allow_html=True)
-st.sidebar.markdown("<hr>", unsafe_allow_html=True)
+st.sidebar.markdown("<h3>Operation Settings</h3><hr>", unsafe_allow_html=True)
 
-# 구글 시트 CSV 게시 링크 입력란 (관리자용)
-sheet_url = st.sidebar.text_input("🔗 구글 시트 DB 링크 (CSV)", help="구글 시트에서 '웹에 게시(CSV)'로 생성한 링크를 입력하세요.")
+# 다음 달 연산이 기본값이 되도록 자동 세팅
+today = datetime.date.today()
+default_month = today.month + 1 if today.month < 12 else 1
+default_year = today.year if today.month < 12 else today.year + 1
 
+year = st.sidebar.number_input("연도 (Year)", value=default_year, step=1)
+month = st.sidebar.number_input("월 (Month)", value=default_month, min_value=1, max_value=12, step=1)
 st.sidebar.markdown("<br>", unsafe_allow_html=True)
-year = st.sidebar.number_input("연도 (Year)", value=2026, step=1)
-month = st.sidebar.number_input("월 (Month)", value=10, min_value=1, max_value=12, step=1)
 male_off = st.sidebar.number_input("남성 목표 휴무일수", value=11, step=1)
 female_off = st.sidebar.number_input("여성 목표 휴무일수", value=12, step=1)
 holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="3, 9")
@@ -66,31 +73,51 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
 # ---------------------------------------------------------
-# [메인 화면] 실시간 데이터 로드 및 연산
+# [메인 화면] 실시간 데이터 로드 및 통계
 # ---------------------------------------------------------
-st.markdown("### Ⅰ. 실시간 직원 명단 (Live Roster DB)")
+st.markdown("### Ⅰ. 실시간 제출 현황 (Live Dashboard)")
 
-if not sheet_url:
-    st.info("💡 좌측 톱니바퀴 메뉴(Operation Settings)에 **구글 시트 DB 링크**를 입력하면 명단이 자동으로 로드됩니다.")
+if SHEET_URL == "여기에_구글_시트_CSV_링크를_붙여넣으세요":
+    st.error("app.py 코드 내의 SHEET_URL 변수에 구글 시트 링크를 입력해 주십시오.")
 else:
     try:
-        # 구글 시트에서 실시간으로 데이터 읽어오기
-        df_input = pd.read_csv(sheet_url)
-        
-        # '타임스탬프' 등 불필요한 열이 있으면 숨기고 화면에 표시
+        df_input = pd.read_csv(SHEET_URL)
         display_df = df_input.drop(columns=["타임스탬프"], errors="ignore")
+        
+        # 📊 [통계 대시보드 추가]
+        total_submitted = len(display_df)
+        lounge_col = next((c for c in display_df.columns if "라운지" in c), None)
+        
+        st.markdown(
+            f"<div style='border:1px solid #333; padding:20px; text-align:center; margin-bottom:20px;'>"
+            f"<span style='font-size:1.2em;'>전체 제출 인원</span><br>"
+            f"<span style='font-size:2.5em; color:#D4AF37; font-weight:bold;'>{total_submitted}</span> 명"
+            f"</div>", 
+            unsafe_allow_html=True
+        )
+
+        if lounge_col and total_submitted > 0:
+            counts = display_df[lounge_col].value_counts()
+            cols = st.columns(len(counts))
+            for i, (lounge_name, count) in enumerate(counts.items()):
+                with cols[i]:
+                    st.metric(label=f"📍 {lounge_name}", value=f"{count}명")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### Ⅱ. 직원 명단 상세 (Roster Details)")
         st.dataframe(display_df, use_container_width=True)
         st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-        st.markdown("### Ⅱ. 스케줄 최적화 (Optimization)")
+        # ---------------------------------------------------------
+        # [스케줄 최적화 연산]
+        # ---------------------------------------------------------
+        st.markdown("### Ⅲ. 스케줄 최적화 (Optimization)")
         if st.button("스케줄 자동 생성 시작", type="primary"):
             with st.spinner("최적화 엔진 연산 중입니다. 잠시만 기다려 주십시오..."):
                 
-                # 구글 폼에서 들어온 데이터를 ScheduleV1 규격에 맞게 매핑
                 name_col = next((c for c in df_input.columns if "이름" in c or "성명" in c), df_input.columns[0])
                 gender_col = next((c for c in df_input.columns if "성별" in c), df_input.columns[1])
                 off_col = next((c for c in df_input.columns if "휴무" in c), None)
-                lounge_col = next((c for c in df_input.columns if "라운지" in c), None)
                 m_col = next((c for c in df_input.columns if "생리" in c), None)
                 rank_col = next((c for c in df_input.columns if "직급" in c), None)
 
@@ -117,34 +144,27 @@ else:
                     all_employees_flat.append(emp_dict)
                     lounge_employees.setdefault(lounge, []).append(emp_dict)
 
-                # OR-Tools 연산
-                flat_labels = solve_global_schedule(
-                    all_employees_flat, year, month, male_off, female_off, LOUNGE_WORKER_BOUNDS, public_holidays
-                )
+                flat_labels = solve_global_schedule(all_employees_flat, year, month, male_off, female_off, LOUNGE_WORKER_BOUNDS, public_holidays)
 
                 if flat_labels is None:
-                    st.error("스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다. 휴무 조건을 완화하여 폼을 수정해 주십시오.")
+                    st.error("스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다.")
                 else:
                     st.success("스케줄 생성이 성공적으로 완료되었습니다.")
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    st.markdown("### Ⅲ. 스케줄 검증 리포트 (Verification Report)")
+                    st.markdown("### Ⅳ. 스케줄 검증 리포트 (Verification Report)")
                     checklist = verify_schedule_checklist(all_employees_flat, flat_labels, year, month, male_off, female_off)
                     chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
                     st.dataframe(chk_df, use_container_width=True)
                     st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-                    st.markdown("### Ⅳ. 결과물 다운로드 (Export)")
+                    st.markdown("### Ⅴ. 결과물 다운로드 (Export)")
                     lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
                     for i, e in enumerate(all_employees_flat):
                         lounge_schedules[e["lounge"]].append(flat_labels[i])
 
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
-                        export_to_excel_single_sheet(
-                            lounge_schedules, lounge_employees, all_employees_flat,
-                            year, month, tmp_excel.name, public_holidays, male_off, female_off
-                        )
-                        
+                        export_to_excel_single_sheet(lounge_schedules, lounge_employees, all_employees_flat, year, month, tmp_excel.name, public_holidays, male_off, female_off)
                         with open(tmp_excel.name, "rb") as f:
                             st.download_button(
                                 label="생성된 엑셀 파일 다운로드 (.xlsx)",
@@ -154,4 +174,4 @@ else:
                                 type="primary"
                             )
     except Exception as e:
-        st.error(f"구글 시트 데이터를 불러오는 데 실패했습니다. 링크가 올바른지, 게시 설정이 CSV로 되어있는지 확인해주세요. (오류 메시지: {str(e)})")
+        st.error(f"데이터를 불러오는 데 실패했습니다. (오류: {str(e)})")
