@@ -105,16 +105,12 @@ st.markdown("""
         .lounge-count { font-size: 20px; }
         .lounge-unit { font-size: 11px; }
         
-        /* 모바일에서는 버튼이 꽉 차게 변경되어 터치하기 쉬워짐 */
         div.stButton > button:first-child { width: 100% !important; padding: 1rem !important; font-size: 1.1rem !important; }
         
-        /* 모바일 테이블 스크롤 안내 텍스트 표시용 클래스 */
         .mobile-scroll-hint { display: block !important; color: #888; font-size: 0.85em; text-align: right; margin-bottom: 5px; }
     }
     
-    /* PC에서는 가로 스크롤 안내 문구 숨김 */
     .mobile-scroll-hint { display: none; }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -280,11 +276,11 @@ else:
             s_year = data["year"]
             s_month = data["month"]
             
-            st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
-            st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 전체 근무표를 확인하세요</span>", unsafe_allow_html=True)
-            
             _, num_days = calendar.monthrange(s_year, s_month)
             day_columns = [f"{d}일" for d in range(1, num_days + 1)]
+            
+            st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
+            st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 전체 근무표를 확인하세요</span>", unsafe_allow_html=True)
             
             schedule_data = []
             for i, emp in enumerate(all_emp):
@@ -313,8 +309,79 @@ else:
                 st.dataframe(df_other.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
                 
             st.markdown("<br><hr>", unsafe_allow_html=True)
+
+            # ---------------------------------------------------------
+            # [새로 추가된 섹션] Ⅴ. 스케줄 요약 및 통계 (엑셀 하단 통계 동일 구현)
+            # ---------------------------------------------------------
+            st.markdown("### Ⅴ. 스케줄 요약 및 일자별 통계 (Summary & Daily Stats)")
             
-            st.markdown("### Ⅴ. 스케줄 검증 리포트 (Verification Report)")
+            # 1. 개인별 근무 요약
+            st.markdown("<h5 style='color: #D4AF37; margin-top: 20px;'>1. 개인별 근무 요약</h5>", unsafe_allow_html=True)
+            summary_data = []
+            for i, row in res_df.iterrows():
+                work_days = row[day_columns].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum()
+                off_days = row[day_columns].isin(["휴무", "휴", "반휴"]).sum()
+                m_off_days = row[day_columns].isin(["생휴"]).sum()
+                
+                summary_data.append({
+                    "라운지": row["라운지"],
+                    "이름": row["이름"],
+                    "성별": row["성별"],
+                    "총 근무일수": work_days,
+                    "총 휴무일수 (일반)": off_days,
+                    "생리휴가 사용일수": m_off_days
+                })
+                
+            summary_df = pd.DataFrame(summary_data)
+            
+            def highlight_stats(val):
+                if isinstance(val, int) and val > 0:
+                    return 'color: #D4AF37; font-weight: bold;'
+                return ''
+                
+            st.dataframe(summary_df.style.map(highlight_stats, subset=["총 근무일수", "총 휴무일수 (일반)", "생리휴가 사용일수"]), use_container_width=True)
+            
+            # 2. 일자별 근무 통계
+            st.markdown("<h5 style='color: #D4AF37; margin-top: 30px;'>2. 일자별 전체 근무 통계</h5>", unsafe_allow_html=True)
+            
+            daily_stats = []
+            
+            # 전체 통계 계산
+            total_working = [res_df[day].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum() for day in day_columns]
+            total_off = [res_df[day].isin(["휴무", "휴", "생휴", "반휴"]).sum() for day in day_columns]
+            
+            daily_stats.append(["총 출근 인원"] + total_working)
+            daily_stats.append(["총 휴무 인원"] + total_off)
+            
+            # 라운지별 통계 계산
+            for lounge_kw in target_order:
+                df_l = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
+                if not df_l.empty:
+                    lounge_working = [df_l[day].isin(["근무", "주", "야", "오픈", "마감", "미들"]).sum() for day in day_columns]
+                    daily_stats.append([f"{lounge_kw} 출근 인원"] + lounge_working)
+            
+            daily_stats_df = pd.DataFrame(daily_stats, columns=["구분"] + day_columns)
+            
+            # 구분을 인덱스로 설정하여 보기 좋게 구성
+            daily_stats_df = daily_stats_df.set_index("구분")
+            
+            # 통계 스타일링
+            def style_daily_stats(val):
+                if isinstance(val, (int, float)):
+                    if val < 2:  # 인원이 너무 적을 때 경고 표시 (숫자는 환경에 맞게 조정 가능)
+                        return 'color: #FF6B6B; font-weight: bold;'
+                    elif val >= 4: # 인원이 충분할 때
+                        return 'color: #4D96FF; font-weight: bold;'
+                return ''
+                
+            st.dataframe(daily_stats_df.style.map(style_daily_stats), use_container_width=True)
+
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            
+            # ---------------------------------------------------------
+            # Ⅵ. 스케줄 검증 리포트
+            # ---------------------------------------------------------
+            st.markdown("### Ⅵ. 스케줄 검증 리포트 (Verification Report)")
             st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
             checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"])
             chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
@@ -331,7 +398,10 @@ else:
             st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
             st.markdown("<br><hr>", unsafe_allow_html=True)
 
-            st.markdown("### Ⅵ. 엑셀 다운로드 (Export to Excel)")
+            # ---------------------------------------------------------
+            # Ⅶ. 엑셀 다운로드
+            # ---------------------------------------------------------
+            st.markdown("### Ⅶ. 엑셀 다운로드 (Export to Excel)")
             lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
             for i, e in enumerate(all_emp):
                 if e["lounge"] in lounge_schedules:
