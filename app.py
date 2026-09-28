@@ -5,7 +5,7 @@ import os
 import datetime
 import calendar
 import pickle
-import base64  # 추가된 모듈 (비밀번호 암호화 티켓 검사용)
+import base64
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -17,16 +17,22 @@ from ScheduleV1 import (
     LOUNGE_ALIAS
 )
 
+# =========================================================
+# 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
+# =========================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
 CACHE_FILE = "cached_schedule.pkl"
 
+# ---------------------------------------------------------
+# [웹 페이지 기본 설정 및 커스텀 CSS]
+# ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", page_icon="👑", layout="wide", initial_sidebar_state="expanded")
 
 # =========================================================
 # 🔒 보안 게이트웨이 & 프리패스 티켓 확인
 # =========================================================
 PASSWORD = "vip2026"
-ENCODED_PWD = base64.b64encode(PASSWORD.encode()).decode() # 암호화된 티켓 값
+ENCODED_PWD = base64.b64encode(PASSWORD.encode()).decode()
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -45,17 +51,26 @@ if not st.session_state.authenticated:
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
         html, body, [class*="css"] { font-family: 'Noto Serif KR', serif !important; }
         .stApp { background-color: #050505 !important; background-image: radial-gradient(circle at 50% 50%, #1a1a1a 0%, #050505 100%) !important; }
-        [data-testid="stSidebar"], [data-testid="collapsedControl"], header { display: none !important; }
+        
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="collapsedControl"] { display: none !important; }
+        header { display: none !important; }
+        
         [data-testid="column"]:nth-of-type(2) {
             position: fixed !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important;
             background: rgba(20, 20, 20, 0.8) !important; backdrop-filter: blur(10px) !important;
             border: 1px solid #2a2a2a !important; border-top: 3px solid #D4AF37 !important; padding: 50px 40px !important;
             border-radius: 12px !important; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8) !important;
-            width: 90% !important; max-width: 400px !important; min-width: 320px !important; z-index: 9999;
+            width: 90% !important; max-width: 400px !important; min-width: 320px !important; margin: 0 !important; z-index: 9999;
         }
+
         @keyframes goldGlow { 0% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); } 50% { text-shadow: 0 0 25px rgba(212, 175, 55, 0.6); } 100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.2); } }
         .brand-title { animation: goldGlow 4s infinite alternate; }
-        .stTextInput > div > div > input { background-color: transparent !important; border: none !important; color: #fff !important; text-align: center !important; letter-spacing: 5px !important; font-size: 1.2em !important; padding: 15px !important; }
+
+        .stTextInput > div > div > input {
+            background-color: transparent !important; border: none !important; color: #fff !important;
+            text-align: center !important; letter-spacing: 5px !important; font-size: 1.2em !important; padding: 15px !important;
+        }
         .stTextInput > div > div { background-color: transparent !important; border: none !important; border-bottom: 1px solid #444 !important; border-radius: 0 !important; box-shadow: none !important; }
         .stTextInput > div > div:focus-within { border-bottom: 1px solid #D4AF37 !important; box-shadow: 0 10px 10px -10px rgba(212, 175, 55, 0.5) !important; }
     </style>
@@ -69,19 +84,18 @@ if not st.session_state.authenticated:
             <h1 class="brand-title" style="font-size: 2.2em; color: #D4AF37; margin: 0 0 30px 0; font-weight: 400; letter-spacing: 2px;">VIP LOUNGE</h1>
         </div>
         """, unsafe_allow_html=True)
+        
         pwd = st.text_input("PASSCODE", type="password", placeholder="PASSCODE", label_visibility="hidden")
         if pwd == PASSWORD:
             st.session_state.authenticated = True
             st.rerun()
         elif pwd:
             st.markdown("<div style='color: #FF6B6B; text-align: center; font-size: 0.85em; margin-top: 15px;'>올바르지 않은 패스코드입니다.</div>", unsafe_allow_html=True)
-    st.stop() 
+            
+    st.stop()  # 🛑 비밀번호 통과 전까지 아래 코드 실행 원천 차단
 
-# (이하 기존 코드 유지...)
-if "schedule_generated" not in st.session_state:
-# ...
 # =========================================================
-# 🔄 세션 상태 및 로컬 파일 연동 (인증 성공 시 여기서부터 실행)
+# 🔄 세션 상태 및 로컬 파일 연동 (메인 스케줄 앱 로직)
 # =========================================================
 if "schedule_generated" not in st.session_state:
     if os.path.exists(CACHE_FILE):
@@ -96,7 +110,7 @@ if "schedule_generated" not in st.session_state:
         st.session_state.schedule_generated = False
         st.session_state.schedule_data = {}
 
-# CSS: 스케줄 앱 메인 화면용 CSS (기존 스타일 유지)
+# CSS: 스케줄 앱 메인 화면용 CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
@@ -366,7 +380,6 @@ else:
             # ---------------------------------------------------------
             st.markdown("### Ⅴ. 스케줄 요약 및 일자별 통계 (Summary & Daily Stats)")
             
-            # 1. 개인별 근무 요약
             st.markdown("<h5 style='color: #D4AF37; margin-top: 20px;'>1. 개인별 근무 요약</h5>", unsafe_allow_html=True)
             summary_data = []
             for i, row in res_df.iterrows():
@@ -392,7 +405,6 @@ else:
                 
             st.dataframe(summary_df.style.map(highlight_stats, subset=["총 근무일수", "총 휴무일수 (일반)", "생리휴가 사용일수"]), use_container_width=True)
             
-            # 2. 일자별 근무 통계
             st.markdown("<h5 style='color: #D4AF37; margin-top: 30px;'>2. 일자별 전체 근무 통계</h5>", unsafe_allow_html=True)
             
             daily_stats = []
