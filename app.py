@@ -17,7 +17,7 @@ from ScheduleV1 import (
 # =========================================================
 # 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
 # =========================================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSSowckbIlw5-5vpetW-IkzpZI5IoRrJCfh6kS-YLroaOkLHUmfr0qILhGCuWfsdW4urIVSJlyUjhSR/pub?output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
 
 # ---------------------------------------------------------
 # [웹 페이지 기본 설정 및 커스텀 CSS]
