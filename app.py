@@ -4,7 +4,7 @@ import tempfile
 import os
 import datetime
 import calendar
-import pickle  # 데이터를 로컬 파일로 저장하고 불러오기 위한 모듈 추가
+import pickle
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -20,7 +20,7 @@ from ScheduleV1 import (
 # 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
 # =========================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
-CACHE_FILE = "cached_schedule.pkl"  # 생성된 스케줄을 저장할 내부 파일명
+CACHE_FILE = "cached_schedule.pkl"
 
 # ---------------------------------------------------------
 # [웹 페이지 기본 설정 및 커스텀 CSS]
@@ -31,7 +31,6 @@ st.set_page_config(page_title="VIP Lounge Schedule System", layout="wide", initi
 # 🔄 세션 상태 및 로컬 파일 연동 (새로고침 방어 로직)
 # =========================================================
 if "schedule_generated" not in st.session_state:
-    # 앱이 처음 켜졌거나 새로고침 되었을 때, 로컬에 저장된 캐시 파일이 있는지 확인
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "rb") as f:
@@ -44,6 +43,7 @@ if "schedule_generated" not in st.session_state:
         st.session_state.schedule_generated = False
         st.session_state.schedule_data = {}
 
+# CSS: 모바일 반응형(Media Query) 적용
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
@@ -76,16 +76,45 @@ st.markdown("""
     #MainMenu, footer {visibility: hidden;}
     hr { border-top: 1px solid #D4AF37 !important; opacity: 0.2; margin: 2rem 0; }
     
+    /* 기본(PC) 대시보드 카드 스타일 */
     .total-box {
-        background: linear-gradient(145deg, #1a1a1a, #121212);
-        border: 1px solid #333;
-        border-top: 3px solid #D4AF37;
-        border-radius: 10px;
-        padding: 30px;
-        text-align: center;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.4);
-        margin-bottom: 30px;
+        background: linear-gradient(145deg, #1a1a1a, #121212); border: 1px solid #333;
+        border-top: 3px solid #D4AF37; border-radius: 10px; padding: 30px;
+        text-align: center; box-shadow: 0 8px 16px rgba(0,0,0,0.4); margin-bottom: 30px;
     }
+    .total-title { font-size:1.1em; color:#A0A0A0; letter-spacing:1px; }
+    .total-count { font-size:3.5em; color:#D4AF37; font-weight:700; line-height:1; }
+    
+    .lounge-card {
+        background-color: #161616; border: 1px solid #2a2a2a; border-top: 3px solid #D4AF37; 
+        border-radius: 8px; padding: 20px 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .lounge-title { color: #A0A0A0; font-size: 14px; font-weight: 400; margin-bottom: 10px; letter-spacing: 1px; }
+    .lounge-count { color: #D4AF37; font-size: 26px; font-weight: bold; }
+    .lounge-unit { font-size: 13px; color: #666; font-weight: normal; }
+
+    /* 📱 모바일(화면 너비 768px 이하) 최적화 스타일 */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.8rem !important; }
+        .total-box { padding: 15px; margin-bottom: 15px; }
+        .total-title { font-size: 0.9em; }
+        .total-count { font-size: 2.5em; }
+        
+        .lounge-card { padding: 15px 5px; margin-bottom: 10px; }
+        .lounge-title { font-size: 12px; margin-bottom: 5px; }
+        .lounge-count { font-size: 20px; }
+        .lounge-unit { font-size: 11px; }
+        
+        /* 모바일에서는 버튼이 꽉 차게 변경되어 터치하기 쉬워짐 */
+        div.stButton > button:first-child { width: 100% !important; padding: 1rem !important; font-size: 1.1rem !important; }
+        
+        /* 모바일 테이블 스크롤 안내 텍스트 표시용 클래스 */
+        .mobile-scroll-hint { display: block !important; color: #888; font-size: 0.85em; text-align: right; margin-bottom: 5px; }
+    }
+    
+    /* PC에서는 가로 스크롤 안내 문구 숨김 */
+    .mobile-scroll-hint { display: none; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -114,7 +143,6 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
-# 스케줄 텍스트 색상 결정 함수
 def color_schedule_cells(val):
     val_str = str(val).strip()
     if any(keyword in val_str for keyword in ["휴무", "생휴", "연차", "공휴", "반휴", "휴"]):
@@ -148,8 +176,8 @@ else:
         
         st.markdown(
             f"<div class='total-box'>"
-            f"<span style='font-size:1.1em; color:#A0A0A0 !important; letter-spacing:1px;'>등록 인원 (Saved Personnel)</span><br><br>"
-            f"<span style='font-size:3.5em; color:#D4AF37; font-weight:700; line-height:1;'>{total_submitted}</span>"
+            f"<span class='total-title'>등록 인원 (Saved Personnel)</span><br><br>"
+            f"<span class='total-count'>{total_submitted}</span>"
             f"<span style='font-size:1.5em; color:#666 !important; margin-left:10px;'>명</span>"
             f"</div>", 
             unsafe_allow_html=True
@@ -164,15 +192,16 @@ else:
                 count = lounge_counts[lounge_name]
                 with cols[i]:
                     card_html = f"""
-                    <div style="background-color: #161616; border: 1px solid #2a2a2a; border-top: 3px solid #D4AF37; border-radius: 8px; padding: 20px 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                        <div style="color: #A0A0A0; font-size: 14px; font-weight: 400; margin-bottom: 10px; letter-spacing: 1px;">{lounge_name}</div>
-                        <div style="color: #D4AF37; font-size: 26px; font-weight: bold;">{count}<span style="font-size: 13px; color: #666; font-weight: normal;"> 명</span></div>
+                    <div class="lounge-card">
+                        <div class="lounge-title">{lounge_name}</div>
+                        <div class="lounge-count">{count}<span class="lounge-unit"> 명</span></div>
                     </div>
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
         
         st.markdown("<br><hr>", unsafe_allow_html=True)
         st.markdown("### Ⅱ. 직원 명단 상세 (Roster Details)")
+        st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
         st.dataframe(display_df, use_container_width=True)
         st.markdown("<br><hr>", unsafe_allow_html=True)
 
@@ -222,7 +251,6 @@ else:
                 else:
                     st.success("✅ 스케줄 생성이 성공적으로 완료되었습니다.")
                     
-                    # 새 결과를 세션 상태에 저장
                     new_schedule_data = {
                         "all_employees_flat": all_employees_flat,
                         "lounge_employees": lounge_employees,
@@ -236,12 +264,11 @@ else:
                     st.session_state.schedule_generated = True
                     st.session_state.schedule_data = new_schedule_data
                     
-                    # 💡 핵심: 앱 구동 환경(로컬)에 결과를 파일로 덮어씌워 영구 저장
                     with open(CACHE_FILE, "wb") as f:
                         pickle.dump(new_schedule_data, f)
 
         # ---------------------------------------------------------
-        # [결과 출력 영역] - 세션/캐시에 데이터가 있으면 항상 출력
+        # [결과 출력 영역]
         # ---------------------------------------------------------
         if st.session_state.schedule_generated:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -254,6 +281,7 @@ else:
             s_month = data["month"]
             
             st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
+            st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 전체 근무표를 확인하세요</span>", unsafe_allow_html=True)
             
             _, num_days = calendar.monthrange(s_year, s_month)
             day_columns = [f"{d}일" for d in range(1, num_days + 1)]
@@ -287,6 +315,7 @@ else:
             st.markdown("<br><hr>", unsafe_allow_html=True)
             
             st.markdown("### Ⅴ. 스케줄 검증 리포트 (Verification Report)")
+            st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
             checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"])
             chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
             
