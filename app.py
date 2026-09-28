@@ -168,8 +168,7 @@ st.markdown("""
 
 st.markdown("""
 <div style='text-align: center; border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 25px; margin-bottom: 30px;'>
-    <h1 style='margin-bottom: 0;'>현대백화점 판교점</h1>
-    <span style='font-size: 1.2em; color: #888 !important; letter-spacing: 3px; font-weight: 300;'>VIP LOUNGE SCHEDULE MANAGER</span>
+
 </div>
 """, unsafe_allow_html=True)
 
