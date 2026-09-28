@@ -46,6 +46,32 @@ if "schedule_generated" not in st.session_state:
 # CSS: 스케줄 앱 메인 화면용 CSS
 # ... (이하 기존 스케줄 코드 그대로 유지) ...
 # CSS: 스케줄 앱 메인 화면용 CSS
+st.markdown("""
+    <style>
+    /* 데이터프레임 컨테이너 배경 */
+    [data-testid="stDataFrame"] {
+        background-color: transparent !important;
+    }
+    
+    /* 셀 내부 배경색 및 테두리 */
+    [data-testid="stDataFrame"] div[data-testid="StyledFullScreenButton"] {
+        display: none; /* 전체화면 버튼 숨기기 (깔끔한 UI를 위해) */
+    }
+    
+    /* 테이블 헤더 및 셀 강제 다크모드 적용 */
+    thead tr th, tbody tr td {
+        background-color: #161616 !important;
+        color: #E0E0E0 !important;
+        border-color: #333333 !important;
+    }
+    
+    /* 헤더 골드 포인트 */
+    thead tr th {
+        color: #D4AF37 !important;
+        border-bottom: 2px solid #D4AF37 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # [VIP Lounge] 하단 하얀색 테두리 및 Streamlit 워터마크 강제 제거 CSS
 hide_streamlit_ui = """
