@@ -270,7 +270,9 @@ else:
                 off_col = next((c for c in df_input.columns if "휴무" in c), None)
                 m_col = next((c for c in df_input.columns if "생리" in c), None)
                 rank_col = next((c for c in df_input.columns if "직급" in c), None)
-
+# 👇 '연차' 열을 읽어들이는 1줄을 추가해 주세요!
+                annual_col = next((c for c in df_input.columns if "연차" in c), None)
+                
                 all_employees_flat = []
                 lounge_employees = {lounge: [] for lounge in LOUNGE_LIST}
 
@@ -290,7 +292,14 @@ else:
                     if m_col and pd.notna(row[m_col]):
                         if str(row[m_col]).strip().isdigit(): m_off = int(str(row[m_col]).strip())
 
-                    emp_dict = {"name": name, "gender": gender, "lounge": lounge, "rank": rank, "req_off": req_off, "m_off": m_off, "raw_lounge": raw_lounge}
+# 👇 여기부터 '연차' 데이터를 파싱하는 코드를 추가해 주세요!
+                    req_annual = []
+                    if annual_col and pd.notna(row[annual_col]):
+                        for item in str(row[annual_col]).replace(";", ",").split(","):
+                            if item.strip().isdigit(): req_annual.append(int(item.strip()))
+
+                    # 👇 emp_dict에 "req_annual": req_annual 항목을 껴서 넘겨줍니다!
+                    emp_dict = {"name": name, "gender": gender, "lounge": lounge, "rank": rank, "req_off": req_off, "m_off": m_off, "req_annual": req_annual, "raw_lounge": raw_lounge}
                     all_employees_flat.append(emp_dict)
                     
                     if lounge in lounge_employees:
