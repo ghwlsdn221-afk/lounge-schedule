@@ -506,7 +506,7 @@ def export_to_excel_single_sheet(
 
             # 휴무총합 (휴무 ~ 휴점 카운트 셀 합산)
             off_start_col = get_column_letter(sum_col_start + 1)
-            off_end_col = get_column_letter(sum_col_start + 5)
+            off_end_col = get_column_letter(sum_col_start + 4)
             c_tot_off = ws.cell(
                 row=curr_r,
                 column=sum_col_start + 5,
