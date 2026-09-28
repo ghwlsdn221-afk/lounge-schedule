@@ -3,7 +3,7 @@ import pandas as pd
 import tempfile
 import os
 import datetime
-import calendar  # 달의 일수 계산을 위해 추가
+import calendar
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -30,7 +30,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700&display=swap');
     
     html, body, [class*="css"]  { font-family: 'Noto Serif KR', serif !important; }
-    .stApp { background-color: #0d0d0d; } /* 조금 더 깊은 다크 톤 */
+    .stApp { background-color: #0d0d0d; }
     h1, h2, h3, h4, h5, h6 { color: #D4AF37 !important; font-weight: 400 !important; letter-spacing: 1.5px; }
     p, span, label, div { color: #E0E0E0 !important; }
     
@@ -59,7 +59,7 @@ st.markdown("""
     #MainMenu, footer {visibility: hidden;}
     hr { border-top: 1px solid #D4AF37 !important; opacity: 0.2; margin: 2rem 0; }
     
-    /* 대시보드 총원 박스 애니메이션 */
+    /* 대시보드 총원 박스 */
     .total-box {
         background: linear-gradient(145deg, #1a1a1a, #121212);
         border: 1px solid #333;
@@ -85,7 +85,6 @@ st.markdown("""
 # ---------------------------------------------------------
 st.sidebar.markdown("<h3>Operation Settings</h3><hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
 
-# 다음 달 연산이 기본값이 되도록 자동 세팅
 today = datetime.date.today()
 default_month = today.month + 1 if today.month < 12 else 1
 default_year = today.year if today.month < 12 else today.year + 1
@@ -99,6 +98,17 @@ holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
 
+# 스케줄 텍스트 색상 결정 함수 (Dataframe Style 적용용)
+def color_schedule_cells(val):
+    val_str = str(val).strip()
+    if val_str in ["휴", "생", "연", "공휴", "반휴"]:
+        # 휴무 관련: 옅은 붉은색 톤
+        return 'color: #FF6B6B; font-weight: bold; background-color: rgba(255, 107, 107, 0.1);'
+    elif val_str in ["주", "야", "오픈", "마감", "미들"]:
+        # 근무 관련: 옅은 푸른색 톤
+        return 'color: #4D96FF; font-weight: bold; background-color: rgba(77, 150, 255, 0.1);'
+    return ''
+
 # ---------------------------------------------------------
 # [메인 화면] 실시간 데이터 로드 및 통계
 # ---------------------------------------------------------
@@ -111,11 +121,9 @@ else:
         df_input = pd.read_csv(SHEET_URL)
         display_df = df_input.drop(columns=["타임스탬프"], errors="ignore")
         
-        # 📊 [통계 대시보드 - Fancy UI 적용]
         total_submitted = len(display_df)
         lounge_col = next((c for c in display_df.columns if "라운지" in c), None)
         
-        # 총원 표시 박스
         st.markdown(
             f"<div class='total-box'>"
             f"<span style='font-size:1.1em; color:#A0A0A0 !important; letter-spacing:1px;'>등록 인원 (Saved Personnel)</span><br><br>"
@@ -125,29 +133,24 @@ else:
             unsafe_allow_html=True
         )
 
+        target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
+        
+        def get_order_weight(name):
+            for idx, target in enumerate(target_order):
+                if target in str(name):
+                    return idx
+            return 999 
+
         if lounge_col and total_submitted > 0:
             lounge_counts = display_df[lounge_col].value_counts().to_dict()
-            
-            # [라운지 순서 강제 정렬 로직]
-            # 사용자가 요청한 순서: 자데, 자홀, 블랙, 블루, 세이지
-            target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
-            
-            def get_order_weight(name):
-                for idx, target in enumerate(target_order):
-                    if target in name:
-                        return idx
-                return 999  # 지정되지 않은 라운지는 맨 뒤로
-            
-            # 정렬된 라운지 키 리스트 생성
             sorted_lounges = sorted(lounge_counts.keys(), key=get_order_weight)
             
-            # 커스텀 카드 UI 렌더링
             cols = st.columns(len(sorted_lounges))
             for i, lounge_name in enumerate(sorted_lounges):
                 count = lounge_counts[lounge_name]
                 with cols[i]:
                     card_html = f"""
-                    <div style="background-color: #161616; border: 1px solid #2a2a2a; border-top: 3px solid #D4AF37; border-radius: 8px; padding: 20px 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: transform 0.2s;">
+                    <div style="background-color: #161616; border: 1px solid #2a2a2a; border-top: 3px solid #D4AF37; border-radius: 8px; padding: 20px 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
                         <div style="color: #A0A0A0; font-size: 14px; font-weight: 400; margin-bottom: 10px; letter-spacing: 1px;">{lounge_name}</div>
                         <div style="color: #D4AF37; font-size: 26px; font-weight: bold;">{count}<span style="font-size: 13px; color: #666; font-weight: normal;"> 명</span></div>
                     </div>
@@ -194,7 +197,6 @@ else:
                     emp_dict = {"name": name, "gender": gender, "lounge": lounge, "rank": rank, "req_off": req_off, "m_off": m_off, "raw_lounge": raw_lounge}
                     all_employees_flat.append(emp_dict)
                     
-                    # LOUNGE_LIST에 존재하는 경우에만 분류
                     if lounge in lounge_employees:
                         lounge_employees[lounge].append(emp_dict)
 
@@ -207,18 +209,16 @@ else:
                     st.markdown("<br>", unsafe_allow_html=True)
                     
                     # ---------------------------------------------------------
-                    # Ⅳ. 결과물 화면 출력 (웹 브라우저 표시)
+                    # Ⅳ. 결과물 화면 출력 (라운지별 분할 표시 & 색상 반영)
                     # ---------------------------------------------------------
                     st.markdown("### Ⅳ. 생성된 스케줄 결과 (Generated Schedule)")
                     
                     _, num_days = calendar.monthrange(year, month)
                     day_columns = [f"{d}일" for d in range(1, num_days + 1)]
                     
-                    # 결과를 DataFrame으로 변환
                     schedule_data = []
                     for i, emp in enumerate(all_employees_flat):
                         schedule_row = list(flat_labels[i])
-                        # 길이가 안 맞을 경우 대비 패딩 처리
                         if len(schedule_row) < num_days:
                             schedule_row += [""] * (num_days - len(schedule_row))
                         elif len(schedule_row) > num_days:
@@ -230,12 +230,24 @@ else:
                     columns = ["라운지", "이름", "성별", "직급"] + day_columns
                     res_df = pd.DataFrame(schedule_data, columns=columns)
                     
-                    # 화면 표시용 DataFrame도 요청하신 라운지 순서대로 정렬
-                    res_df['sort_key'] = res_df['라운지'].apply(get_order_weight)
-                    res_df = res_df.sort_values(['sort_key', '이름']).drop(columns=['sort_key']).reset_index(drop=True)
-                    
-                    st.dataframe(res_df, use_container_width=True, height=400)
-                    st.markdown("<br>", unsafe_allow_html=True)
+                    # 라운지별로 분할하여 화면에 표시
+                    for lounge_kw in target_order:
+                        # 해당 라운지 데이터만 추출
+                        df_lounge = res_df[res_df['라운지'].str.contains(lounge_kw, na=False)]
+                        
+                        if not df_lounge.empty:
+                            st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>{lounge_kw}</h5>", unsafe_allow_html=True)
+                            # 'map'을 사용하여 근무/휴무 색상 스타일 적용
+                            st.dataframe(df_lounge.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+
+                    # 지정된 5개 라운지에 속하지 않는 '기타' 라운지가 있을 경우 처리
+                    other_mask = ~res_df['라운지'].str.contains('|'.join(target_order), na=False)
+                    df_other = res_df[other_mask]
+                    if not df_other.empty:
+                        st.markdown(f"<h5 style='color: #D4AF37; margin-top: 20px; border-left: 4px solid #D4AF37; padding-left: 10px;'>기타 라운지</h5>", unsafe_allow_html=True)
+                        st.dataframe(df_other.style.map(color_schedule_cells, subset=day_columns), use_container_width=True)
+                        
+                    st.markdown("<br><hr>", unsafe_allow_html=True)
                     
                     # ---------------------------------------------------------
                     # Ⅴ. 스케줄 검증 리포트
@@ -244,7 +256,6 @@ else:
                     checklist = verify_schedule_checklist(all_employees_flat, flat_labels, year, month, male_off, female_off)
                     chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
                     
-                    # 점검 결과에 따른 색상 하이라이트 함수
                     def highlight_result(val):
                         if val == "PASS":
                             return 'color: #00FF00; font-weight: bold;'
@@ -254,11 +265,12 @@ else:
                             return 'color: #FFA500; font-weight: bold;'
                         return ''
                     
-                    st.dataframe(chk_df.style.applymap(highlight_result, subset=['점검 결과']), use_container_width=True)
+                    # pandas 최신 버전에 맞춰 applymap -> map으로 수정됨
+                    st.dataframe(chk_df.style.map(highlight_result, subset=['점검 결과']), use_container_width=True)
                     st.markdown("<br><hr>", unsafe_allow_html=True)
 
                     # ---------------------------------------------------------
-                    # Ⅵ. 결과물 다운로드
+                    # Ⅵ. 엑셀 다운로드 (오류가 수정되어 정상 작동)
                     # ---------------------------------------------------------
                     st.markdown("### Ⅵ. 엑셀 다운로드 (Export to Excel)")
                     lounge_schedules = {lounge: [] for lounge in LOUNGE_LIST}
