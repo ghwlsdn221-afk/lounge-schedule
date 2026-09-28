@@ -4,6 +4,7 @@ import tempfile
 import os
 import datetime
 import calendar
+import pickle  # 데이터를 로컬 파일로 저장하고 불러오기 위한 모듈 추가
 
 # 기존 스케줄 연산 함수 임포트
 from ScheduleV1 import (
@@ -19,16 +20,29 @@ from ScheduleV1 import (
 # 🛑 관리자 설정: 구글 시트 CSV 게시 링크를 아래에 입력하세요.
 # =========================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTsq8nya6v_Nf8hOCQC70GsP9dhdtbWZV2pnyTNeozrmJ2ye4vhzVKNEr-8fWV7NSV_WkZ3bL6GIP8K/pub?output=csv"
+CACHE_FILE = "cached_schedule.pkl"  # 생성된 스케줄을 저장할 내부 파일명
 
 # ---------------------------------------------------------
 # [웹 페이지 기본 설정 및 커스텀 CSS]
 # ---------------------------------------------------------
 st.set_page_config(page_title="VIP Lounge Schedule System", layout="wide", initial_sidebar_state="expanded")
 
-# 세션 상태(Session State) 초기화: 스케줄 결과 유지용
+# =========================================================
+# 🔄 세션 상태 및 로컬 파일 연동 (새로고침 방어 로직)
+# =========================================================
 if "schedule_generated" not in st.session_state:
-    st.session_state.schedule_generated = False
-    st.session_state.schedule_data = {}
+    # 앱이 처음 켜졌거나 새로고침 되었을 때, 로컬에 저장된 캐시 파일이 있는지 확인
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "rb") as f:
+                st.session_state.schedule_data = pickle.load(f)
+            st.session_state.schedule_generated = True
+        except Exception:
+            st.session_state.schedule_generated = False
+            st.session_state.schedule_data = {}
+    else:
+        st.session_state.schedule_generated = False
+        st.session_state.schedule_data = {}
 
 st.markdown("""
 <style>
@@ -109,7 +123,6 @@ def color_schedule_cells(val):
         return 'color: #4D96FF; font-weight: bold; background-color: #1C2A3A;'
     return ''
 
-# 라운지 정렬을 위한 글로벌 변수 및 함수
 target_order = ["자데", "자홀", "블랙", "블루", "세이지"]
 
 def get_order_weight(name):
@@ -208,9 +221,9 @@ else:
                     st.session_state.schedule_generated = False
                 else:
                     st.success("✅ 스케줄 생성이 성공적으로 완료되었습니다.")
-                    # 연산 결과를 세션 상태에 저장
-                    st.session_state.schedule_generated = True
-                    st.session_state.schedule_data = {
+                    
+                    # 새 결과를 세션 상태에 저장
+                    new_schedule_data = {
                         "all_employees_flat": all_employees_flat,
                         "lounge_employees": lounge_employees,
                         "flat_labels": flat_labels,
@@ -220,14 +233,19 @@ else:
                         "female_off": female_off,
                         "public_holidays": public_holidays
                     }
+                    st.session_state.schedule_generated = True
+                    st.session_state.schedule_data = new_schedule_data
+                    
+                    # 💡 핵심: 앱 구동 환경(로컬)에 결과를 파일로 덮어씌워 영구 저장
+                    with open(CACHE_FILE, "wb") as f:
+                        pickle.dump(new_schedule_data, f)
 
         # ---------------------------------------------------------
-        # [결과 출력 영역] - 세션 상태에 데이터가 있으면 항상 출력
+        # [결과 출력 영역] - 세션/캐시에 데이터가 있으면 항상 출력
         # ---------------------------------------------------------
         if st.session_state.schedule_generated:
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 저장된 데이터 불러오기
             data = st.session_state.schedule_data
             all_emp = data["all_employees_flat"]
             l_emp = data["lounge_employees"]
