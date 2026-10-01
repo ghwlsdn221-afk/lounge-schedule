@@ -181,10 +181,15 @@ st.sidebar.markdown("<br>", unsafe_allow_html=True)
 male_off = st.sidebar.number_input("남성 목표 휴무일수", value=11, step=1)
 female_off = st.sidebar.number_input("여성 목표 휴무일수", value=12, step=1)
 holidays_str = st.sidebar.text_input("공휴일 지정 (쉼표 구분)", value="3, 9")
-closed_days_str = st.sidebar.text_input("휴점일 지정 (쉼표 구분)", value="19")  # 💡 휴점일 입력 추가
+closed_days_str = st.sidebar.text_input("휴점일 지정 (쉼표 구분)", value="19")
+
+# 👇 전사 총 출근인원 제약 조건 UI 추가
+st.sidebar.markdown("<br><span style='color:#D4AF37; font-weight:bold;'>[전사 총 출근 인원 최소치]</span>", unsafe_allow_html=True)
+min_total_weekday = st.sidebar.number_input("평일 (월~목)", value=24, step=1)
+min_total_weekend = st.sidebar.number_input("주말 및 공휴일 (금~일/공휴일)", value=27, step=1)
 
 public_holidays = [int(x.strip()) for x in holidays_str.split(",") if x.strip().isdigit()]
-store_closed_days = [int(x.strip()) for x in closed_days_str.split(",") if x.strip().isdigit()]  # 💡 휴점일 리스트 변환
+store_closed_days = [int(x.strip()) for x in closed_days_str.split(",") if x.strip().isdigit()]
 
 def color_schedule_cells(val):
     val_str = str(val).strip()
