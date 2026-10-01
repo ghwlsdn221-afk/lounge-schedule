@@ -286,7 +286,7 @@ def solve_global_schedule(
     model.Minimize(sum(penalty_vars))
     solver = CpSolver()
     solver.parameters.random_seed = random.randint(1, 10000)
-    solver.parameters.max_time_in_seconds = 60.0
+    solver.parameters.max_time_in_seconds = 120.0
     status = solver.Solve(model)
 
     if status not in (OPTIMAL, FEASIBLE):
