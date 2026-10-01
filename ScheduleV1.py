@@ -157,6 +157,13 @@ def solve_global_schedule(
             model.Add(sum_off == 3).OnlyEnforceIf(off_3)
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
             penalty_vars.append(off_3 * 1000)
+            # 3-2. 4연속 휴무 초강력 페널티 (어떤 핑계로든 4일 연속 쉬는 꼴은 못 본다!)
+        for d in range(1, num_days - 2):
+            off_4 = model.NewBoolVar(f"o4_{e}_{d}")
+            sum_off = sum(is_off[e, d + offset] for offset in range(4))
+            model.Add(sum_off == 4).OnlyEnforceIf(off_4)
+            model.Add(sum_off <= 3).OnlyEnforceIf(off_4.Not())
+            penalty_vars.append(off_4 * 10000)  # 👈 벌점 10,000점! 절대 못 쉬게 함
             
 # 👇 [신규 추가] 4. 이틀 연속 휴무 페널티 (휴무 분산 유도)
         # 생휴 등 필수적인 연속 휴무를 위해 벌점을 너무 높지 않게(200점) 설정하여,
@@ -224,7 +231,7 @@ def solve_global_schedule(
             mgrs_working = sum(1 - is_off[m, d] for m in managers)
             shortfall = model.NewIntVar(0, len(managers), f"mgr_short_{d}")
             model.Add(mgrs_working + shortfall >= 2)
-            penalty_vars.append(shortfall * 10000)
+            penalty_vars.append(shortfall * 50000)
 
     # 7. 라운지별 핵심 책임자 동시 휴무 금지
     for l in LOUNGE_LIST:
@@ -279,7 +286,7 @@ def solve_global_schedule(
     model.Minimize(sum(penalty_vars))
     solver = CpSolver()
     solver.parameters.random_seed = random.randint(1, 10000)
-    solver.parameters.max_time_in_seconds = 120.0
+    solver.parameters.max_time_in_seconds = 60.0
     status = solver.Solve(model)
 
     if status not in (OPTIMAL, FEASIBLE):
