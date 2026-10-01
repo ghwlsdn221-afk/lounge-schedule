@@ -29,12 +29,13 @@ LOUNGE_WORKER_BOUNDS = {
     "YP": (3, 5)     # YP 인원 기준 업데이트 (제약조건에서 요일별로 세밀하게 다시 분기됨)
 }
 
+# 함수 정의 부분 맨 끝에 파라미터 추가
 def solve_global_schedule(
-    emp_list, year, month, male_off_days, female_off_days, worker_bounds, public_holidays, store_closed_days=None
+    emp_list, year, month, male_off_days, female_off_days, worker_bounds, public_holidays, store_closed_days=None,
+    min_total_weekday=24, min_total_weekend=27  # 👈 파라미터 2개 추가
 ):
     if store_closed_days is None:
         store_closed_days = []
-
     num_days = calendar.monthrange(year, month)[1]
     num_emp = len(emp_list)
 
@@ -239,6 +240,36 @@ def solve_global_schedule(
                 if l != home_lounge:
                     penalty_vars.append(assign[e, d, l] * 100)
 
+# 8. 타 라운지 지원 근무 벌점
+    for e in range(num_emp):
+        home_lounge = emp_list[e]["lounge"]
+        for d in range(1, num_days + 1):
+            if d in store_closed_days: continue
+            for l in LOUNGE_LIST:
+                if l != home_lounge:
+                    penalty_vars.append(assign[e, d, l] * 100)
+
+    # 👇 [신규 추가] 9. 전사 일일 총 출근 인원 제약 (평일 24명 / 주말·공휴일 27명 등)
+    for d in range(1, num_days + 1):
+        if d in store_closed_days: continue
+        
+        w_idx = datetime.date(year, month, d).weekday()
+        # 금~일(4,5,6) 이거나 공휴일인 경우 주말 기준으로 판단
+        is_weekend_or_holiday = (w_idx >= 4) or (d in public_holidays)
+        
+        # 해당 일자(d)에 출근(assign)하는 전사 인원 합산
+        total_working_day = sum(assign[e, d, l] for e in range(num_emp) for l in LOUNGE_LIST)
+        shortfall = model.NewIntVar(0, num_emp, f"global_short_{d}")
+        
+        if is_weekend_or_holiday:
+            model.Add(total_working_day + shortfall >= min_total_weekend)
+        else:
+            model.Add(total_working_day + shortfall >= min_total_weekday)
+            
+        # 총 인원이 부족할 경우 매우 강력한 페널티 부여
+        penalty_vars.append(shortfall * 50000)
+
+    model.Minimize(sum(penalty_vars))
     model.Minimize(sum(penalty_vars))
     solver = CpSolver()
     solver.parameters.random_seed = random.randint(1, 10000)
@@ -280,7 +311,7 @@ def solve_global_schedule(
 
     return flat_labels
 
-def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None):
+def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None, min_total_weekday=24, min_total_weekend=27):
     if store_closed_days is None: store_closed_days = []
     num_days = calendar.monthrange(year, month)[1]
     checklist = []
@@ -368,6 +399,26 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
     if not off_mismatch: chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수 (연차 별도)", "✅ 적합", "전 직원 연차 제외 기본 휴무일수 100% 달성")
     else: chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수 (연차 별도)", "❌ 미흡", f"일수 불일치: {', '.join(off_mismatch)}")
     checklist.append(chk5)
+
+# 👇 [신규 추가] 6. 전사 총 출근 인원 점검
+    global_short_days = []
+    for d in range(1, num_days + 1):
+        if d in store_closed_days: continue
+        w_idx = datetime.date(year, month, d).weekday()
+        is_weekend_or_holiday = (w_idx >= 4) or (d in public_holidays)
+        
+        # 근무 키워드가 들어간 직원 수 합산
+        working_cnt = sum(1 for e in range(len(emp_list)) if flat_labels[e][d - 1] == "근무")
+        target = min_total_weekend if is_weekend_or_holiday else min_total_weekday
+        
+        if working_cnt < target:
+            global_short_days.append(f"{d}일({working_cnt}명/최소{target}명)")
+
+    if not global_short_days: 
+        chk6 = ("전사 총 출근 인원", f"평일 {min_total_weekday}명 / 주말·공휴일 {min_total_weekend}명 이상", "✅ 적합", "모든 영업일 최소 출근 인원 충족")
+    else: 
+        chk6 = ("전사 총 출근 인원", f"평일 {min_total_weekday}명 / 주말·공휴일 {min_total_weekend}명 이상", "❌ 미흡", f"미달 일자: {', '.join(global_short_days)}")
+    checklist.append(chk6)
 
     return checklist
 
