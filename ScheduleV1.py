@@ -494,12 +494,15 @@ def export_to_excel_single_sheet(
                 c_sum.border = border_box
 
             # 휴무총합 (휴무 ~ 휴점)
-            off_start_col = get_column_letter(sum_col_start + 1)
-            off_end_col = get_column_letter(sum_col_start + 5)
+           # 휴무총합 (휴무, 신청휴, 생휴, 휴점만 합산 / 연차 제외)
+            col_off_start = get_column_letter(sum_col_start + 1) # 휴무
+            col_off_end = get_column_letter(sum_col_start + 3)   # 생휴
+            col_closed = get_column_letter(sum_col_start + 5)    # 휴점
+            
             c_tot_off = ws.cell(
                 row=curr_r,
                 column=sum_col_start + 6,
-                value=f"=SUM({off_start_col}{curr_r}:{off_end_col}{curr_r})",
+                value=f"=SUM({col_off_start}{curr_r}:{col_off_end}{curr_r}) + {col_closed}{curr_r}",
             )
             c_tot_off.alignment = Alignment(horizontal="center")
             c_tot_off.border = border_box
