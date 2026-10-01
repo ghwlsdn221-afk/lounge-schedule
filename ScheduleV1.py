@@ -311,8 +311,9 @@ def solve_global_schedule(
 
     return flat_labels
 
-def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None, min_total_weekday=24, min_total_weekend=27):
+def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None, min_total_weekday=24, min_total_weekend=27, public_holidays=None):
     if store_closed_days is None: store_closed_days = []
+    if public_holidays is None: public_holidays = [] # 👈 이 줄도 추가해 주세요.
     num_days = calendar.monthrange(year, month)[1]
     checklist = []
     off_keywords = ["휴무", "신청휴", "생휴", "휴점", "연차"]
@@ -612,7 +613,8 @@ def export_to_excel_single_sheet(
         flat_labels_all.append(lounge_schedules[l][e_idx])
 
     checklist_results = verify_schedule_checklist(
-        all_employees_flat, flat_labels_all, year, month, male_off_days, female_off_days, store_closed_days
+        all_employees_flat, flat_labels_all, year, month, male_off_days, female_off_days, 
+        store_closed_days, 24, 27, public_holidays
     )
 
     font_pass, fill_pass = Font(name="맑은 고딕", size=10, bold=True, color="1B5E20"), PatternFill(start_color="C8E6C9", fill_type="solid")
