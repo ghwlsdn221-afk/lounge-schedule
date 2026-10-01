@@ -433,7 +433,8 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
 
 def export_to_excel_single_sheet(
     lounge_schedules, lounge_employees, all_employees_flat, year, month, output_excel,
-    public_holidays, male_off_days, female_off_days, store_closed_days=None
+    public_holidays, male_off_days, female_off_days, store_closed_days=None,
+    min_total_weekday=24, min_total_weekend=27  # 👈 추가!
 ):
     if store_closed_days is None: store_closed_days = []
     num_days = calendar.monthrange(year, month)[1]
@@ -620,11 +621,11 @@ def export_to_excel_single_sheet(
         flat_labels_all.append(lounge_schedules[l][e_idx])
 
     # 💡 엑셀 출력 함수 내부에서 체크리스트 호출할 때도 24, 27 강제 전달 대신, public_holidays 포함하여 넘김
+# 💡 엑셀 출력 시에도 웹 화면과 동일한 인원 세팅값을 적용
     checklist_results = verify_schedule_checklist(
         all_employees_flat, flat_labels_all, year, month, male_off_days, female_off_days, 
-        store_closed_days, 24, 27, public_holidays
+        store_closed_days, min_total_weekday, min_total_weekend, public_holidays
     )
-
     font_pass, fill_pass = Font(name="맑은 고딕", size=10, bold=True, color="1B5E20"), PatternFill(start_color="C8E6C9", fill_type="solid")
     font_fail, fill_fail = Font(name="맑은 고딕", size=10, bold=True, color="C62828"), PatternFill(start_color="FFCDD2", fill_type="solid")
 
