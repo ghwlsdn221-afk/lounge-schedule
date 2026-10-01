@@ -9,8 +9,8 @@ from openpyxl.utils import get_column_letter
 import pandas as pd
 from ortools.sat.python.cp_model import FEASIBLE, OPTIMAL, CpModel, CpSolver
 
-# 6개 라운지 목록 (자데 최상단 배치)
-LOUNGE_LIST = ["자데", "블랙", "자홀", "블루", "세이지", "YP"]
+# 7개 라운지 목록 (자데 최상단 배치, 바리스타 추가)
+LOUNGE_LIST = ["자데", "블랙", "자홀", "블루", "세이지", "YP", "바리스타"]
 
 LOUNGE_ALIAS = {
     "자스민 데스크": "자데",
@@ -26,16 +26,17 @@ LOUNGE_WORKER_BOUNDS = {
     "자홀": (6, 8),
     "블루": (2, 3),
     "세이지": (2, 3),
-    "YP": (3, 5)     # YP 인원 기준 업데이트 (제약조건에서 요일별로 세밀하게 다시 분기됨)
+    "YP": (3, 5),
+    "바리스타": (2, 3)  # 바리스타 최소 인원 세팅
 }
 
-# 함수 정의 부분 맨 끝에 파라미터 추가
 def solve_global_schedule(
     emp_list, year, month, male_off_days, female_off_days, worker_bounds, public_holidays, store_closed_days=None,
-    min_total_weekday=24, min_total_weekend=27  # 👈 파라미터 2개 추가
+    min_total_weekday=24, min_total_weekend=27
 ):
     if store_closed_days is None:
         store_closed_days = []
+
     num_days = calendar.monthrange(year, month)[1]
     num_emp = len(emp_list)
 
@@ -58,6 +59,7 @@ def solve_global_schedule(
 
             model.Add(is_off[e, d] + sum(assign[e, d, l] for l in LOUNGE_LIST) == 1)
 
+            # [지원(Support) 금지 룰 설정]
             if home_lounge == "YP":
                 for l in LOUNGE_LIST:
                     if l != "YP":
@@ -65,7 +67,13 @@ def solve_global_schedule(
             else:
                 model.Add(assign[e, d, "YP"] == 0)
 
-            if home_lounge not in ["자데", "자홀"] and home_lounge != "YP":
+            # ★ 바리스타 신규 룰 1: 타 라운지 소속은 바리스타 라운지로 지원 금지 (인바운드 원천 차단)
+            if home_lounge != "바리스타":
+                model.Add(assign[e, d, "바리스타"] == 0)
+
+            # ★ 바리스타 신규 룰 2: 자데, 자홀, 바리스타 외에는 타 라운지 지원 불가 (아웃바운드 차단)
+            # -> 즉, 바리스타는 타 라운지 지원(아웃바운드)이 '가능'하도록 허용됨
+            if home_lounge not in ["자데", "자홀", "바리스타"] and home_lounge != "YP":
                 for l in LOUNGE_LIST:
                     if l != home_lounge:
                         model.Add(assign[e, d, l] == 0)
@@ -80,15 +88,13 @@ def solve_global_schedule(
     for e, emp in enumerate(emp_list):
         target_off = male_off_days if emp["gender"] == "남" else female_off_days
         
-        # [연차] 신청한 연차가 휴점일과 겹치지 않는 순수 연차일만 추출
         annual_leaves = emp.get("req_annual", [])
         valid_annual = [d for d in annual_leaves if d not in store_closed_days]
         
-        # 1. 월간 목표 휴무일 + 연차일수 = 총 쉬는 날로 강제 (연차는 기본 휴무일수에 미포함)
+        # 1. 월간 목표 휴무일 + 연차일수 = 총 쉬는 날로 강제
         actual_off = sum(is_off[e, d] for d in range(1, num_days + 1))
         model.Add(actual_off == target_off + len(valid_annual))
         
-        # [연차 강제 배정]
         for ad in valid_annual:
             if 1 <= ad <= num_days:
                 model.Add(is_off[e, ad] == 1)
@@ -98,11 +104,11 @@ def solve_global_schedule(
             if 1 <= roff <= num_days and roff not in store_closed_days and roff not in valid_annual:
                 penalty_vars.append((1 - is_off[e, roff]) * 3000)
 
-        # 3. 생휴 제약: 이틀 연속 휴무일 때만 생휴 1일 배정 (월~목 한정)
+        # 3. 생휴 제약
         if emp["gender"] == "여":
             valid_m_days = [
                 d for d in range(1, num_days + 1)
-                if datetime.date(year, month, d).weekday() < 4  # 0:월, 1:화, 2:수, 3:목
+                if datetime.date(year, month, d).weekday() < 4
                 and d not in emp["req_off"]
                 and d not in store_closed_days
                 and d not in valid_annual
@@ -114,17 +120,12 @@ def solve_global_schedule(
                 model.Add(is_off[e, d] == 1).OnlyEnforceIf(is_m)
                 day_m_vars.append((d, is_m))
 
-                # 생휴는 무조건 다른 쉬는 날과 맞닿아 2연휴를 구성해야 함 (Hard Constraint)
                 adj_off = []
-                if d > 1:
-                    adj_off.append(is_off[e, d - 1])
-                if d < num_days:
-                    adj_off.append(is_off[e, d + 1])
+                if d > 1: adj_off.append(is_off[e, d - 1])
+                if d < num_days: adj_off.append(is_off[e, d + 1])
                 
-                if adj_off:
-                    model.AddBoolOr(adj_off).OnlyEnforceIf(is_m)
-                else:
-                    model.Add(is_m == 0)
+                if adj_off: model.AddBoolOr(adj_off).OnlyEnforceIf(is_m)
+                else: model.Add(is_m == 0)
 
             if day_m_vars:
                 model.AddExactlyOne([v[1] for v in day_m_vars])
@@ -174,18 +175,21 @@ def solve_global_schedule(
                 penalty_vars.append(shortfall * 10000)
                 penalty_vars.append(overage * 2000)
                 
-            elif l == "YP":  # ★ YP 라운지 신규 제약 조건 추가
-                # 금(4), 토(5), 일(6) 또는 공휴일 여부 체크
+            elif l == "YP":
                 is_yp_busy = (w_idx >= 4) or (d in public_holidays)
-                
                 if is_yp_busy:
-                    model.Add(working_workers + shortfall >= 4) # 금~일 최소 4명
+                    model.Add(working_workers + shortfall >= 4)
                 else:
-                    model.Add(working_workers + shortfall >= 3) # 월~목 최소 3명
-                    
-                model.Add(working_workers - overage <= 5)       # 최대 5명
+                    model.Add(working_workers + shortfall >= 3)
+                model.Add(working_workers - overage <= 5)
                 penalty_vars.append(shortfall * 10000)
                 penalty_vars.append(overage * 2000)
+
+            elif l == "바리스타": # ★ 바리스타 모든 요일 최소 2명 강제 룰
+                model.Add(working_workers + shortfall >= 2)
+                model.Add(working_workers - overage <= max_w)
+                penalty_vars.append(shortfall * 10000)
+                penalty_vars.append(overage * 1000)
                 
             else:
                 if is_weekend_or_holiday:
@@ -211,6 +215,8 @@ def solve_global_schedule(
 
     # 7. 라운지별 핵심 책임자 동시 휴무 금지
     for l in LOUNGE_LIST:
+        if l == "바리스타": continue # ★ 바리스타 신규 룰 3: 책임자 교차 휴무 제외
+
         lounge_emps = [e for e, emp in enumerate(emp_list) if emp["lounge"] == l]
         if not lounge_emps: continue
 
@@ -238,26 +244,15 @@ def solve_global_schedule(
             if d in store_closed_days: continue
             for l in LOUNGE_LIST:
                 if l != home_lounge:
-                    penalty_vars.append(assign[e, d, l] * 100)
+                    penalty_vars.append(assign[e, d, l] * 100) # 바리스타가 타 라운지 갈 때도 페널티 부여(가급적 본인 라운지 지키도록 유도)
 
-# 8. 타 라운지 지원 근무 벌점
-    for e in range(num_emp):
-        home_lounge = emp_list[e]["lounge"]
-        for d in range(1, num_days + 1):
-            if d in store_closed_days: continue
-            for l in LOUNGE_LIST:
-                if l != home_lounge:
-                    penalty_vars.append(assign[e, d, l] * 100)
-
-    # 👇 [신규 추가] 9. 전사 일일 총 출근 인원 제약 (평일 24명 / 주말·공휴일 27명 등)
+    # 9. 전사 일일 총 출근 인원 제약 (평일 / 주말·공휴일)
     for d in range(1, num_days + 1):
         if d in store_closed_days: continue
         
         w_idx = datetime.date(year, month, d).weekday()
-        # 금~일(4,5,6) 이거나 공휴일인 경우 주말 기준으로 판단
         is_weekend_or_holiday = (w_idx >= 4) or (d in public_holidays)
         
-        # 해당 일자(d)에 출근(assign)하는 전사 인원 합산
         total_working_day = sum(assign[e, d, l] for e in range(num_emp) for l in LOUNGE_LIST)
         shortfall = model.NewIntVar(0, num_emp, f"global_short_{d}")
         
@@ -266,10 +261,8 @@ def solve_global_schedule(
         else:
             model.Add(total_working_day + shortfall >= min_total_weekday)
             
-        # 총 인원이 부족할 경우 매우 강력한 페널티 부여
         penalty_vars.append(shortfall * 50000)
 
-    model.Minimize(sum(penalty_vars))
     model.Minimize(sum(penalty_vars))
     solver = CpSolver()
     solver.parameters.random_seed = random.randint(1, 10000)
@@ -313,7 +306,8 @@ def solve_global_schedule(
 
 def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days, female_off_days, store_closed_days=None, min_total_weekday=24, min_total_weekend=27, public_holidays=None):
     if store_closed_days is None: store_closed_days = []
-    if public_holidays is None: public_holidays = [] # 👈 이 줄도 추가해 주세요.
+    if public_holidays is None: public_holidays = []
+    
     num_days = calendar.monthrange(year, month)[1]
     checklist = []
     off_keywords = ["휴무", "신청휴", "생휴", "휴점", "연차"]
@@ -334,6 +328,8 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
     # 2. 책임자 휴무 교차 여부
     overlap_list = []
     for l in LOUNGE_LIST:
+        if l == "바리스타": continue # ★ 체크리스트에서도 바리스타 교차 검증 패스
+
         lounge_emps = [e for e, emp in enumerate(emp_list) if emp["lounge"] == l]
         if not lounge_emps: continue
         l_managers = [e for e in lounge_emps if emp_list[e]["rank"] == "매니저"]
@@ -401,14 +397,13 @@ def verify_schedule_checklist(emp_list, flat_labels, year, month, male_off_days,
     else: chk5 = ("월 목표 휴무일수", f"남성 {male_off_days}일 / 여성 {female_off_days}일 정확히 준수 (연차 별도)", "❌ 미흡", f"일수 불일치: {', '.join(off_mismatch)}")
     checklist.append(chk5)
 
-# 👇 [신규 추가] 6. 전사 총 출근 인원 점검
+    # 6. 전사 총 출근 인원 점검
     global_short_days = []
     for d in range(1, num_days + 1):
         if d in store_closed_days: continue
         w_idx = datetime.date(year, month, d).weekday()
         is_weekend_or_holiday = (w_idx >= 4) or (d in public_holidays)
         
-        # 근무 키워드가 들어간 직원 수 합산
         working_cnt = sum(1 for e in range(len(emp_list)) if flat_labels[e][d - 1] == "근무")
         target = min_total_weekend if is_weekend_or_holiday else min_total_weekday
         
@@ -545,8 +540,7 @@ def export_to_excel_single_sheet(
                 c_sum.alignment = Alignment(horizontal="center")
                 c_sum.border = border_box
 
-            # 휴무총합 (휴무 ~ 휴점)
-           # 휴무총합 (휴무, 신청휴, 생휴, 휴점만 합산 / 연차 제외)
+            # 휴무총합 (휴무, 신청휴, 생휴, 휴점만 합산 / 연차 제외)
             col_off_start = get_column_letter(sum_col_start + 1) # 휴무
             col_off_end = get_column_letter(sum_col_start + 3)   # 생휴
             col_closed = get_column_letter(sum_col_start + 5)    # 휴점
@@ -612,6 +606,7 @@ def export_to_excel_single_sheet(
         e_idx = next(i for i, e in enumerate(lounge_employees[l]) if e["name"] == emp["name"])
         flat_labels_all.append(lounge_schedules[l][e_idx])
 
+    # 💡 엑셀 출력 함수 내부에서 체크리스트 호출할 때도 24, 27 강제 전달 대신, public_holidays 포함하여 넘김
     checklist_results = verify_schedule_checklist(
         all_employees_flat, flat_labels_all, year, month, male_off_days, female_off_days, 
         store_closed_days, 24, 27, public_holidays
