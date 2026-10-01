@@ -71,9 +71,9 @@ def solve_global_schedule(
             if home_lounge != "바리스타":
                 model.Add(assign[e, d, "바리스타"] == 0)
 
-            # ★ 바리스타 신규 룰 2: 자데, 자홀, 바리스타 외에는 타 라운지 지원 불가 (아웃바운드 차단)
-            # -> 즉, 바리스타는 타 라운지 지원(아웃바운드)이 '가능'하도록 허용됨
-            if home_lounge not in ["자데", "자홀", "바리스타"] and home_lounge != "YP":
+# ★ 아웃바운드(타 라운지 지원) 차단 룰 수정: 블랙, 블루도 타 라운지 지원 가능! 
+            # -> 이제 7개 라운지 중 '세이지'만 타 라운지 지원 불가
+            if home_lounge not in ["자데", "자홀", "바리스타", "블랙", "블루"] and home_lounge != "YP":
                 for l in LOUNGE_LIST:
                     if l != home_lounge:
                         model.Add(assign[e, d, l] == 0)
