@@ -470,12 +470,14 @@ else:
             st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
             
             # 💡 체크리스트 검증 함수에 휴점일 데이터 전달
-# 💡 체크리스트 검증 함수에 전사 총인원 데이터 전달
+
+# 💡 체크리스트 검증 함수에 전사 총인원 및 공휴일 데이터 전달
             checklist = verify_schedule_checklist(
                 all_emp, labels, s_year, s_month, data["male_off"], data["female_off"], 
                 data.get("store_closed_days", []), 
                 data.get("min_total_weekday", 24), 
-                data.get("min_total_weekend", 27)
+                data.get("min_total_weekend", 27),
+                data.get("public_holidays", [])  # 👈 파라미터 추가
             )
             chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
             
