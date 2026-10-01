@@ -201,7 +201,7 @@ def color_schedule_cells(val):
         return 'color: #4D96FF; font-weight: bold; background-color: #1C2A3A;'
     return ''
 
-target_order = ["자데", "자홀", "블랙", "블루", "세이지", "YP"]
+target_order = ["자데", "자홀", "블랙", "블루", "세이지", "YP", "바리스타"]
 
 # 빈칸 제거 및 전체 셀에 다크모드 배경색을 입히는 함수
 def apply_dark_style(df):
