@@ -102,7 +102,7 @@ def solve_global_schedule(
         # 2. 신청 휴무일 반영
         for roff in emp["req_off"]:
             if 1 <= roff <= num_days and roff not in store_closed_days and roff not in valid_annual:
-                penalty_vars.append((1 - is_off[e, roff]) * 3000)
+                penalty_vars.append((1 - is_off[e, roff]) * 100000)
 
         # 3. 생휴 제약
         if emp["gender"] == "여":
@@ -148,7 +148,7 @@ def solve_global_schedule(
             sum_off = sum(is_off[e, d + offset] for offset in range(4))
             model.Add(sum_off == 0).OnlyEnforceIf(worked_4)
             model.Add(sum_off >= 1).OnlyEnforceIf(worked_4.Not())
-            penalty_vars.append(worked_4 * 800)
+            penalty_vars.append(worked_4 * 300)
 
         # 3. 3연속 휴무 페널티
         for d in range(1, num_days - 1):
@@ -156,7 +156,7 @@ def solve_global_schedule(
             sum_off = sum(is_off[e, d + offset] for offset in range(3))
             model.Add(sum_off == 3).OnlyEnforceIf(off_3)
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
-            penalty_vars.append(off_3 * 1000)
+            penalty_vars.append(off_3 * 3000)
             # 3-2. 4연속 휴무 초강력 페널티 (어떤 핑계로든 4일 연속 쉬는 꼴은 못 본다!)
         for d in range(1, num_days - 2):
             off_4 = model.NewBoolVar(f"o4_{e}_{d}")
