@@ -325,6 +325,13 @@ else:
                     LOUNGE_WORKER_BOUNDS, public_holidays, store_closed_days
                 )
 
+# 💡 함수 호출 시 새로 만든 전사 인원 제한 인자 추가 전달
+                flat_labels = solve_global_schedule(
+                    all_employees_flat, year, month, male_off, female_off, 
+                    LOUNGE_WORKER_BOUNDS, public_holidays, store_closed_days,
+                    min_total_weekday, min_total_weekend # 👈 추가됨
+                )
+
                 if flat_labels is None:
                     st.error("❌ 스케줄 생성 실패: 조건에 맞는 스케줄 조합을 찾을 수 없습니다.")
                     st.session_state.schedule_generated = False
@@ -340,7 +347,9 @@ else:
                         "male_off": male_off,
                         "female_off": female_off,
                         "public_holidays": public_holidays,
-                        "store_closed_days": store_closed_days  # 💡 세션에 휴점일 데이터 보존
+                        "store_closed_days": store_closed_days,
+                        "min_total_weekday": min_total_weekday, # 👈 세션 저장에 추가
+                        "min_total_weekend": min_total_weekend  # 👈 세션 저장에 추가
                     }
                     st.session_state.schedule_generated = True
                     st.session_state.schedule_data = new_schedule_data
@@ -461,7 +470,13 @@ else:
             st.markdown("<span class='mobile-scroll-hint'>👉 표를 좌우로 스크롤하여 확인하세요</span>", unsafe_allow_html=True)
             
             # 💡 체크리스트 검증 함수에 휴점일 데이터 전달
-            checklist = verify_schedule_checklist(all_emp, labels, s_year, s_month, data["male_off"], data["female_off"], data.get("store_closed_days", []))
+# 💡 체크리스트 검증 함수에 전사 총인원 데이터 전달
+            checklist = verify_schedule_checklist(
+                all_emp, labels, s_year, s_month, data["male_off"], data["female_off"], 
+                data.get("store_closed_days", []), 
+                data.get("min_total_weekday", 24), 
+                data.get("min_total_weekend", 27)
+            )
             chk_df = pd.DataFrame(checklist, columns=["점검 항목", "검증 기준", "점검 결과", "세부 보고 내용"])
             
             def highlight_result(val):
