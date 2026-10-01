@@ -223,11 +223,10 @@ else:
     try:
         df_input = pd.read_csv(SHEET_URL)
         
-        # 👇 추가된 부분: '연차' 열이 실수(float)로 변환되는 것을 막고 정수 형태의 문자열로 정리
+        # 👇 수정된 부분: 에러 방지를 위해 개별 데이터를 확실하게 문자로 변환 후 처리
         if '연차' in df_input.columns:
-            # 빈칸(NaN)은 빈 문자열로, 소수점이 붙은 숫자는 소수점 앞자리만 잘라내기
-            df_input['연차'] = df_input['연차'].astype(str).apply(
-                lambda x: x.split('.')[0] if x != 'nan' else ''
+            df_input['연차'] = df_input['연차'].apply(
+                lambda x: str(x).split('.')[0] if pd.notna(x) and str(x).lower() != 'nan' else ''
             )
             
         display_df = df_input.drop(columns=["타임스탬프"], errors="ignore")
