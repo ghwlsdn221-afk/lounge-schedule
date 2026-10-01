@@ -136,11 +136,13 @@ def solve_global_schedule(
                     if req_is_m is not None:
                         penalty_vars.append((1 - req_is_m) * 1000)
 
-    # 4. 연속 근무 및 휴무 패턴 제한
+# 4. 연속 근무 및 휴무 패턴 제한
     for e in range(num_emp):
+        # 1. 5연속 근무 절대 금지 (강력 차단 복구)
         for d in range(1, num_days - 3):
             model.Add(sum(is_off[e, d + offset] for offset in range(5)) >= 1)
 
+        # 2. 4연속 근무 페널티 (가급적 3연속 이하로 짜도록 유도)
         for d in range(1, num_days - 2):
             worked_4 = model.NewBoolVar(f"w4_{e}_{d}")
             sum_off = sum(is_off[e, d + offset] for offset in range(4))
@@ -148,12 +150,23 @@ def solve_global_schedule(
             model.Add(sum_off >= 1).OnlyEnforceIf(worked_4.Not())
             penalty_vars.append(worked_4 * 800)
 
+        # 3. 3연속 휴무 페널티
         for d in range(1, num_days - 1):
             off_3 = model.NewBoolVar(f"o3_{e}_{d}")
             sum_off = sum(is_off[e, d + offset] for offset in range(3))
             model.Add(sum_off == 3).OnlyEnforceIf(off_3)
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
             penalty_vars.append(off_3 * 300)
+            
+        # 👇 [신규 추가] 4. 이틀 연속 휴무 페널티 (휴무 분산 유도)
+        # 생휴 등 필수적인 연속 휴무를 위해 벌점을 너무 높지 않게(200점) 설정하여,
+        # 꼭 필요할 때만 2연속을 허용하고 가급적 1일 단위로 휴무를 쪼개도록 유도합니다.
+        for d in range(1, num_days):
+            off_2 = model.NewBoolVar(f"o2_{e}_{d}")
+            sum_off = is_off[e, d] + is_off[e, d + 1]
+            model.Add(sum_off == 2).OnlyEnforceIf(off_2)
+            model.Add(sum_off <= 1).OnlyEnforceIf(off_2.Not())
+            penalty_vars.append(off_2 * 200)
 
     # 5. 라운지별 일일 최소/최대 근무 인원 제약
     for d in range(1, num_days + 1):
