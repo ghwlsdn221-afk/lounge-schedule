@@ -599,6 +599,81 @@ def export_to_excel_single_sheet(
 
         curr_r = r_act + 3
 
+    # ========================================================
+    # 📊 [추가] 일자별 전체 근무 통계 영역
+    # ========================================================
+    # 전사 스케줄 1차원 배열 정리 (통계 연산용)
+    flat_labels_all = []
+    for emp in all_employees_flat:
+        l = emp["lounge"]
+        e_idx = next(i for i, e in enumerate(lounge_employees[l]) if e["name"] == emp["name"])
+        flat_labels_all.append(lounge_schedules[l][e_idx])
+
+    ws.cell(row=curr_r, column=1, value="📊 일자별 전사 근무 통계").font = font_section
+    curr_r += 1
+
+    # 통계표 헤더
+    for c in range(1, 5):
+        cell = ws.cell(row=curr_r, column=c)
+        cell.fill, cell.font, cell.border = fill_navy, font_hdr, border_box
+    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=4)
+    ws.cell(row=curr_r, column=1, value="구분").alignment = Alignment(horizontal="center", vertical="center")
+
+    for d in range(1, num_days + 1):
+        c_day = ws.cell(row=curr_r, column=d + 4, value=f"{d}일")
+        c_day.fill, c_day.font, c_day.border = fill_navy, font_hdr, border_box
+        c_day.alignment = Alignment(horizontal="center", vertical="center")
+    curr_r += 1
+
+    target_order = ["자데", "자홀", "블랙", "블루", "세이지", "YP", "바리스타"]
+    off_keywords = ["휴무", "신청휴", "생휴", "휴점", "연차"]
+
+    # 1. 총 출근 인원
+    for c in range(1, 5): ws.cell(row=curr_r, column=c).border = border_box
+    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=4)
+    ws.cell(row=curr_r, column=1, value="총 출근 인원").alignment = Alignment(horizontal="center", vertical="center")
+    
+    for d in range(1, num_days + 1):
+        cnt = sum(1 for labels in flat_labels_all if labels[d - 1] == "근무")
+        c = ws.cell(row=curr_r, column=d + 4, value=cnt)
+        c.alignment, c.border = Alignment(horizontal="center", vertical="center"), border_box
+        
+        w_idx = datetime.date(year, month, d).weekday()
+        target = min_total_weekend if (w_idx >= 4 or d in public_holidays) else min_total_weekday
+        c.font = Font(bold=True, color="0D47A1") if cnt >= target else Font(bold=True, color="FF0000")
+    curr_r += 1
+
+    # 2. 총 휴무 인원
+    for c in range(1, 5): ws.cell(row=curr_r, column=c).border = border_box
+    ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=4)
+    ws.cell(row=curr_r, column=1, value="총 휴무 인원").alignment = Alignment(horizontal="center", vertical="center")
+    
+    for d in range(1, num_days + 1):
+        cnt = sum(1 for labels in flat_labels_all if labels[d - 1] in off_keywords)
+        c = ws.cell(row=curr_r, column=d + 4, value=cnt)
+        c.alignment, c.border = Alignment(horizontal="center", vertical="center"), border_box
+    curr_r += 1
+
+    # 3. 라운지별 출근 인원
+    for lounge_name in target_order:
+        if lounge_name not in lounge_employees or not lounge_employees[lounge_name]: continue
+        
+        for c in range(1, 5): ws.cell(row=curr_r, column=c).border = border_box
+        ws.merge_cells(start_row=curr_r, start_column=1, end_row=curr_r, end_column=4)
+        ws.cell(row=curr_r, column=1, value=f"{lounge_name} 출근 인원").alignment = Alignment(horizontal="center", vertical="center")
+        
+        for d in range(1, num_days + 1):
+            cnt = sum(1 for i, emp in enumerate(all_employees_flat) if emp["lounge"] == lounge_name and flat_labels_all[i][d - 1] == "근무")
+            c = ws.cell(row=curr_r, column=d + 4, value=cnt)
+            c.alignment, c.border = Alignment(horizontal="center", vertical="center"), border_box
+            if cnt == 0: c.font = Font(color="999999")
+        curr_r += 1
+
+    curr_r += 2  # 통계표와 체크리스트 사이 여백
+
+    # ========================================================
+    # 📋 [기존] 체크리스트 검증 영역
+    # ========================================================
     ws.cell(row=curr_r, column=1, value="📋 스케줄 최적화 연산 결과 검증 체크리스트").font = font_section
     curr_r += 1
 
@@ -614,14 +689,7 @@ def export_to_excel_single_sheet(
         ws.cell(row=curr_r, column=s_col, value=h_text).alignment = Alignment(horizontal="center", vertical="center")
     curr_r += 1
 
-    flat_labels_all = []
-    for emp in all_employees_flat:
-        l = emp["lounge"]
-        e_idx = next(i for i, e in enumerate(lounge_employees[l]) if e["name"] == emp["name"])
-        flat_labels_all.append(lounge_schedules[l][e_idx])
-
-    # 💡 엑셀 출력 함수 내부에서 체크리스트 호출할 때도 24, 27 강제 전달 대신, public_holidays 포함하여 넘김
-# 💡 엑셀 출력 시에도 웹 화면과 동일한 인원 세팅값을 적용
+    # 💡 엑셀 출력 시에도 웹 화면과 동일한 인원 세팅값을 적용
     checklist_results = verify_schedule_checklist(
         all_employees_flat, flat_labels_all, year, month, male_off_days, female_off_days, 
         store_closed_days, min_total_weekday, min_total_weekend, public_holidays
