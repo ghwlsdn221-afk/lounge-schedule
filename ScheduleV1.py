@@ -158,7 +158,15 @@ def solve_global_schedule(
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
             penalty_vars.append(off_3 * 300)
             
-
+# 👇 [신규 추가] 4. 이틀 연속 휴무 페널티 (휴무 분산 유도)
+        # 생휴 등 필수적인 연속 휴무를 위해 벌점을 너무 높지 않게(200점) 설정하여,
+        # 꼭 필요할 때만 2연속을 허용하고 가급적 1일 단위로 휴무를 쪼개도록 유도합니다.
+        for d in range(1, num_days):
+            off_2 = model.NewBoolVar(f"o2_{e}_{d}")
+            sum_off = is_off[e, d] + is_off[e, d + 1]
+            model.Add(sum_off == 2).OnlyEnforceIf(off_2)
+            model.Add(sum_off <= 1).OnlyEnforceIf(off_2.Not())
+            penalty_vars.append(off_2 * 200)
 
     # 5. 라운지별 일일 최소/최대 근무 인원 제약
     for d in range(1, num_days + 1):
