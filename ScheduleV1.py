@@ -156,7 +156,7 @@ def solve_global_schedule(
             sum_off = sum(is_off[e, d + offset] for offset in range(3))
             model.Add(sum_off == 3).OnlyEnforceIf(off_3)
             model.Add(sum_off <= 2).OnlyEnforceIf(off_3.Not())
-            penalty_vars.append(off_3 * 300)
+            penalty_vars.append(off_3 * 1000)
             
 # 👇 [신규 추가] 4. 이틀 연속 휴무 페널티 (휴무 분산 유도)
         # 생휴 등 필수적인 연속 휴무를 위해 벌점을 너무 높지 않게(200점) 설정하여,
@@ -224,7 +224,7 @@ def solve_global_schedule(
             mgrs_working = sum(1 - is_off[m, d] for m in managers)
             shortfall = model.NewIntVar(0, len(managers), f"mgr_short_{d}")
             model.Add(mgrs_working + shortfall >= 2)
-            penalty_vars.append(shortfall * 1000)
+            penalty_vars.append(shortfall * 10000)
 
     # 7. 라운지별 핵심 책임자 동시 휴무 금지
     for l in LOUNGE_LIST:
