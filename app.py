@@ -503,10 +503,11 @@ else:
                     lounge_schedules[e["lounge"]].append(labels[i])
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
-                # 💡 엑셀 추출 함수에 휴점일 데이터 전달
+                # 💡 엑셀 추출 함수에 휴점일 및 전사 총인원 세팅값 전달
                 export_to_excel_single_sheet(
                     lounge_schedules, l_emp, all_emp, s_year, s_month, 
-                    tmp_excel.name, data["public_holidays"], data["male_off"], data["female_off"], data.get("store_closed_days", [])
+                    tmp_excel.name, data["public_holidays"], data["male_off"], data["female_off"], data.get("store_closed_days", []),
+                    data.get("min_total_weekday", 24), data.get("min_total_weekend", 27)  # 👈 추가!
                 )
                 with open(tmp_excel.name, "rb") as f:
                     st.download_button(
