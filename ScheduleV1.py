@@ -148,7 +148,7 @@ def solve_global_schedule(
             sum_off = sum(is_off[e, d + offset] for offset in range(4))
             model.Add(sum_off == 0).OnlyEnforceIf(worked_4)
             model.Add(sum_off >= 1).OnlyEnforceIf(worked_4.Not())
-            penalty_vars.append(worked_4 * 800)
+            penalty_vars.append(worked_4 * 100)
 
         # 3. 3연속 휴무 페널티
         for d in range(1, num_days - 1):
