@@ -90,8 +90,7 @@ hide_streamlit_ui = """
         padding-bottom: 0rem !important;
     }
     
-    /* 5. 사이드바 접기/펴기 버튼 완전 숨김 (사이드바 고정) */
-    [data-testid="stSidebarCollapseButton"],
+/* 5. 사이드바 접기/펴기 버튼을 숨기되, 사이드바 자체는 렌더링 유지 */
     [data-testid="collapsedControl"] {
         display: none !important;
     }
