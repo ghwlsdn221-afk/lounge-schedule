@@ -89,6 +89,12 @@ hide_streamlit_ui = """
         padding-top: 1rem !important;
         padding-bottom: 0rem !important;
     }
+    
+    /* 5. 사이드바 접기/펴기 버튼 완전 숨김 (사이드바 고정) */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
 </style>
 """
 st.markdown(hide_streamlit_ui, unsafe_allow_html=True)
