@@ -72,9 +72,13 @@ st.markdown("""
 # [VIP Lounge] 하단 하얀색 테두리 및 Streamlit 워터마크 강제 제거 CSS
 hide_streamlit_ui = """
 <style>
-    /* 1. 기본 헤더 및 푸터 완벽 숨김 */
-    header {visibility: hidden;}
+    /* 1. 기본 푸터 숨김 (헤더 전체 숨김 해제) */
     footer {visibility: hidden;}
+    
+    /* 1-1. 헤더 우측 상단 메뉴(점 3개)만 숨기고 사이드바 토글 버튼(>)은 남김 */
+    [data-testid="stHeader"] .stAppDeployButton {display: none !important;}
+    [data-testid="stHeader"] button[title="View options"] {display: none !important;}
+    [data-testid="stHeader"] > div > div:nth-child(2) {display: none !important;} 
     
     /* 2. 'Built with Streamlit' 워터마크 및 전체화면 버튼 강제 숨김 */
     .viewerBadge_container__1QSob {display: none !important;}
